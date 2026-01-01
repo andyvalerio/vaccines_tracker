@@ -5,7 +5,7 @@ export const ExportService = {
     if (vaccines.length === 0) return;
 
     // Helper to safely escape XML characters
-    const escapeXML = (str: string | undefined) => {
+    const escapeXML = (str: string | undefined | null) => {
       if (!str) return '';
       return str.replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -21,6 +21,8 @@ export const ExportService = {
       <Cell><Data ss:Type="String">${escapeXML(v.dateTaken)}</Data></Cell>
       <Cell><Data ss:Type="String">${escapeXML(v.nextDueDate)}</Data></Cell>
       <Cell ss:StyleID="sNotes"><Data ss:Type="String">${escapeXML(v.notes)}</Data></Cell>
+      <Cell><Data ss:Type="String">${escapeXML(v.suggestedNextDueDate)}</Data></Cell>
+      <Cell ss:StyleID="sNotes"><Data ss:Type="String">${escapeXML(v.suggestedNotes)}</Data></Cell>
     </Row>`).join('');
 
     // XML Spreadsheet 2003 Template
@@ -58,11 +60,15 @@ export const ExportService = {
    <Column ss:AutoFitWidth="0" ss:Width="100"/>
    <Column ss:AutoFitWidth="0" ss:Width="100"/>
    <Column ss:AutoFitWidth="0" ss:Width="300"/>
+   <Column ss:AutoFitWidth="0" ss:Width="120"/>
+   <Column ss:AutoFitWidth="0" ss:Width="250"/>
    <Row ss:AutoFitHeight="0" ss:Height="20" ss:StyleID="sHeader">
     <Cell><Data ss:Type="String">Vaccine Name</Data></Cell>
     <Cell><Data ss:Type="String">Date Taken</Data></Cell>
     <Cell><Data ss:Type="String">Next Due Date</Data></Cell>
     <Cell><Data ss:Type="String">Notes</Data></Cell>
+    <Cell><Data ss:Type="String">AI Suggested Date</Data></Cell>
+    <Cell><Data ss:Type="String">AI Guidance</Data></Cell>
    </Row>
    ${rows}
   </Table>

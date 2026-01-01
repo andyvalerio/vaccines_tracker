@@ -5,7 +5,7 @@ import { AuthService } from './services/authService';
 import { ExportService } from './services/exportService';
 import { GeminiService } from './services/geminiService';
 import { Account, Vaccine, Suggestion } from './types';
-import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, WarningIcon, CheckIcon, XMarkIcon } from './components/Icons';
+import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, WarningIcon, CheckIcon, XMarkIcon, ShieldCheckIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
 
 function App() {
@@ -38,22 +38,27 @@ function App() {
           setAccount(syncedAccount);
           
           unsubscribeVaccines = StorageService.subscribeVaccines(syncedAccount.id, (loadedVaccines) => {
-            // Sort by status: Missing dates first (action needed), then by date taken descending (newest first)
+            // Sort Logic:
+            // 1. Missing Date Taken (Highest priority)
+            // 2. Needs Analysis (Missing Next Due Date AND Not Analyzed Yet)
+            // 3. Date Taken (Newest first)
             const sorted = loadedVaccines.sort((a, b) => {
                const aMissing = !a.dateTaken;
                const bMissing = !b.dateTaken;
-
-               // If both missing, keep stable or sort by name/creation.
-               if (aMissing && bMissing) return 0;
                
-               // If A is missing date, it goes to the TOP (-1)
-               if (aMissing) return -1;
-               
-               // If B is missing date, it goes to the TOP (1)
-               if (bMissing) return 1;
+               if (aMissing && !bMissing) return -1;
+               if (!aMissing && bMissing) return 1;
 
-               // Both have dates. Newest date first.
-               return new Date(b.dateTaken!).getTime() - new Date(a.dateTaken!).getTime();
+               const aNeedsAnalysis = !a.nextDueDate && !a.analysisStatus;
+               const bNeedsAnalysis = !b.nextDueDate && !b.analysisStatus;
+
+               if (aNeedsAnalysis && !bNeedsAnalysis) return -1;
+               if (!aNeedsAnalysis && bNeedsAnalysis) return 1;
+
+               // Both have dates or both missing. Newest date first.
+               const dateA = a.dateTaken ? new Date(a.dateTaken).getTime() : 0;
+               const dateB = b.dateTaken ? new Date(b.dateTaken).getTime() : 0;
+               return dateB - dateA;
             });
             setVaccines(sorted);
           });
@@ -151,7 +156,6 @@ function App() {
             analysisStatus: 'completed',
             suggestedNextDueDate: result.nextDueDate,
             suggestedNotes: result.notes,
-            // If API says not recommended to have next shot, we can consider it 'accepted' empty state or just leave as completed
           });
         } catch (err) {
           console.error("Analysis failed", err);
@@ -219,21 +223,28 @@ function App() {
 
   const handleAcceptAnalysis = async (vaccine: Vaccine, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!account || !vaccine.suggestedNextDueDate) return;
+    if (!account) return;
 
     try {
+      // Append AI suggestion to notes
       const updatedNote = vaccine.notes 
         ? `${vaccine.notes}\n\nAI Note: ${vaccine.suggestedNotes || ''}`
         : vaccine.suggestedNotes || '';
 
-      await StorageService.updateVaccine(account.id, {
+      const updates: any = {
         ...vaccine,
-        nextDueDate: vaccine.suggestedNextDueDate,
         notes: updatedNote.trim(),
         suggestedNextDueDate: null,
         suggestedNotes: null,
         analysisStatus: 'accepted'
-      });
+      };
+
+      // Only set nextDueDate if one was actually suggested
+      if (vaccine.suggestedNextDueDate) {
+         updates.nextDueDate = vaccine.suggestedNextDueDate;
+      }
+
+      await StorageService.updateVaccine(account.id, updates);
     } catch (err) {
       console.error("Failed to accept analysis", err);
     }
@@ -474,7 +485,7 @@ function App() {
                         </div>
                       </div>
 
-                      {/* AI Suggestion Box */}
+                      {/* AI Suggestion Box (Renewal Needed) */}
                       {vaccine.suggestedNextDueDate && !vaccine.nextDueDate && (
                         <div className="mt-4 bg-purple-50 border border-purple-100 rounded-lg p-3 relative overflow-hidden">
                            <div className="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
@@ -505,6 +516,24 @@ function App() {
                                         Dismiss
                                     </button>
                                  </div>
+                              </div>
+                           </div>
+                        </div>
+                      )}
+
+                      {/* AI "All Good" Box (No Renewal Needed) - STATIC GREEN NOTE */}
+                      {!vaccine.suggestedNextDueDate && vaccine.analysisStatus === 'completed' && vaccine.suggestedNotes && (
+                        <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 relative overflow-hidden">
+                           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-400"></div>
+                           <div className="flex items-start gap-3">
+                              <ShieldCheckIcon className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1">
+                                 <p className="text-sm font-semibold text-emerald-900 mb-1">
+                                    Status: Good
+                                 </p>
+                                 <p className="text-xs text-emerald-700 leading-relaxed">
+                                    {vaccine.suggestedNotes}
+                                 </p>
                               </div>
                            </div>
                         </div>

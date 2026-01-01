@@ -30,12 +30,19 @@ export const analyzeVaccine = onCall({ secrets: [geminiApiKey], region: "europe-
     
     prompt += `
       Based on general medical guidelines for adults, when is the next dose typically due?
-      IMPORTANT: The 'nextDueDate' MUST be in the future (after ${today}). 
-      If the standard schedule implies a date in the past (meaning it is overdue), provide a date in the near future (e.g. 1 week from today) so I can schedule it.
-      If it's a one-time vaccine or no future dose is needed, set 'nextDueDate' to null.
-      Provide a very brief note (max 2 sentences) about why a next shot is needed.
       
-      Return the response in JSON format with keys: 'nextDueDate' (YYYY-MM-DD or null), 'notes' (string), 'isRecommended' (boolean).
+      Rules:
+      1. If a next dose is needed, 'nextDueDate' MUST be in the future (after ${today}).
+      2. If it is overdue, provide a date in the near future (e.g. 1 week from today).
+      3. If no further doses are needed (e.g. fully vaccinated, lifetime immunity), set 'nextDueDate' to null.
+      4. In 'notes', explain WHY. If null, explain that they are fully protected. If a date is set, explain why the booster is needed.
+      
+      Return JSON:
+      {
+        "nextDueDate": "YYYY-MM-DD" or null,
+        "notes": "Short explanation (max 2 sentences)",
+        "isRecommended": boolean
+      }
     `;
 
     const response = await ai.models.generateContent({
