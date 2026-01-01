@@ -11,8 +11,8 @@ export default defineConfig(({ mode }) => {
     base: './', 
     plugins: [react()],
     define: {
-      // Polyfill process.env.API_KEY for the client code (Gemini Service)
-      'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      // API_KEY is no longer exposed to the client bundle.
+      // Logic is handled in Firebase Functions.
     },
     build: {
       outDir: 'dist',

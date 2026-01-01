@@ -16,8 +16,14 @@ async function deploy() {
     const functionsDir = path.join(__dirname, "../functions");
     if (fs.existsSync(functionsDir)) {
       console.log("   Installing backend dependencies...");
-      execSync("npm ci", { cwd: functionsDir, stdio: 'inherit' });
+      // Changed to 'npm install' because 'npm ci' requires an existing package-lock.json
+      // which might not exist on the first run.
+      execSync("npm install", { cwd: functionsDir, stdio: 'inherit' });
       
+      console.log("   Building backend...");
+      // We must build the TypeScript code before deploying
+      execSync("npm run build", { cwd: functionsDir, stdio: 'inherit' });
+
       console.log("   Deploying functions to Firebase (europe-west1)...");
       // --only functions ensures we don't accidentally overwrite DB rules or hosting if not intended
       execSync("firebase deploy --only functions", { stdio: 'inherit' });
