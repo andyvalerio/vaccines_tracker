@@ -12,8 +12,9 @@ async function deploy() {
 
   const localDist = path.join(__dirname, "../dist");
   
-  // Use the specific path you provided, but allow override via .env
-  const remoteRoot = process.env.FTP_REMOTE_ROOT || "/home/u238199624/domains/valerio.nu/public_html/vaccines";
+  // CHANGED: Use 'public_html/vaccines' which is standard for shared hosting.
+  // This path is relative to your FTP user's root directory.
+  const remoteRoot = process.env.FTP_REMOTE_ROOT || "public_html/vaccines";
 
   if (!fs.existsSync(localDist)) {
     console.error("❌ 'dist' folder not found. Please run 'npm run build' first.");
@@ -26,21 +27,20 @@ async function deploy() {
 
   try {
     await client.access({
-      host: process.env.FTP_HOST || "ftp.valerio.nu", // Default to domain if missing
+      host: process.env.FTP_HOST || "ftp.valerio.nu",
       user: process.env.FTP_USER || "u238199624",
       password: process.env.FTP_PASSWORD,
-      secure: false, // Try false first for standard FTP, set to true if explicit FTPS is needed
+      secure: false, 
     });
 
     console.log("✅ Connected to FTP server");
 
     // Ensure remote directory exists
-    // Note: ensureDir creates the directory if it doesn't exist
     await client.ensureDir(remoteRoot);
 
     console.log("DTO Uploading files...");
     
-    // uploadFromDir uploads the CONTENTS of localDist to the current remote directory
+    // uploadFromDir uploads the CONTENTS of localDist to the remote path
     await client.uploadFromDir(localDist, remoteRoot);
 
     console.log("✨ Deployment successful!");
