@@ -3,7 +3,7 @@ import AuthScreen from './components/AuthScreen';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { Account, Profile, Vaccine } from './types';
-import { PlusIcon, PlusIcon as PlusIconSmall, TrashIcon, CalendarIcon } from './components/Icons';
+import { PlusIcon, TrashIcon, CalendarIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
 
 function App() {
@@ -72,15 +72,6 @@ function App() {
     }
   };
 
-  const handleAddProfile = () => {
-    const name = prompt("Enter name for new profile (e.g., Partner, Child):");
-    if (name && account) {
-      const newProfile = StorageService.addProfile(account.id, name);
-      setProfiles(prev => [...prev, newProfile]);
-      setActiveProfileId(newProfile.id);
-    }
-  };
-
   if (isLoadingAuth) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -99,6 +90,15 @@ function App() {
     v.nextDueDate && new Date(v.nextDueDate) > new Date()
   ).sort((a, b) => new Date(a.nextDueDate!).getTime() - new Date(b.nextDueDate!).getTime());
 
+  // Helper to determine dashboard title
+  const getDashboardTitle = (profile: Profile) => {
+    if (profile.isPrimary) return "My Dashboard";
+    if (profile.name.toLowerCase() === 'me') return "My Dashboard";
+    
+    const name = profile.name;
+    return name.endsWith('s') ? `${name}' Dashboard` : `${name}'s Dashboard`;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       {/* Header */}
@@ -110,7 +110,7 @@ function App() {
                   <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                 </svg>
             </div>
-            <span className="font-bold text-lg tracking-tight">VaxTrack</span>
+            <span className="font-bold text-lg tracking-tight">Vaccines Tracker</span>
           </div>
           
           <div className="flex items-center gap-4">
@@ -141,17 +141,10 @@ function App() {
                   }`}
                 >
                   <span className={`w-2 h-2 rounded-full ${p.color === 'rose' ? 'bg-rose-400' : 'bg-blue-400'}`}></span>
-                  {p.name} {p.isPrimary && '(Me)'}
+                  {p.name} {(p.isPrimary && p.name.toLowerCase() !== 'me') && '(Me)'}
                 </button>
               ))}
-              
-              <button
-                onClick={handleAddProfile}
-                className="flex items-center gap-1 px-3 py-2 rounded-full border border-dashed border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 text-sm font-medium transition-colors whitespace-nowrap"
-              >
-                <PlusIconSmall className="w-4 h-4" />
-                <span>Add Person</span>
-              </button>
+              {/* Add Person button removed as requested */}
            </div>
         </div>
 
@@ -159,7 +152,7 @@ function App() {
           <div className="animate-fade-in">
              <div className="flex justify-between items-end mb-6">
                 <div>
-                   <h1 className="text-2xl font-bold text-slate-900">{activeProfile.name}'s Dashboard</h1>
+                   <h1 className="text-2xl font-bold text-slate-900">{getDashboardTitle(activeProfile)}</h1>
                    <p className="text-slate-500">Managing immunizations</p>
                 </div>
              </div>
@@ -200,7 +193,7 @@ function App() {
                     <CalendarIcon className="w-8 h-8" />
                   </div>
                   <h3 className="text-slate-900 font-medium text-lg">No records found</h3>
-                  <p className="text-slate-500 mt-1 max-w-xs mx-auto">Start tracking by adding {activeProfile.name}'s first vaccine record.</p>
+                  <p className="text-slate-500 mt-1 max-w-xs mx-auto">Start tracking by adding {activeProfile.isPrimary ? 'your' : `${activeProfile.name}'s`} first vaccine record.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -255,7 +248,8 @@ function App() {
           isOpen={isModalOpen} 
           onClose={() => setIsModalOpen(false)} 
           onAdd={handleAddVaccine}
-          activeUser={{ id: activeProfile.id, name: activeProfile.name, email: '' } as any} // Adapt for modal
+          activeUser={{ id: activeProfile.id, name: activeProfile.name }}
+          existingVaccines={vaccines}
         />
       )}
     </div>

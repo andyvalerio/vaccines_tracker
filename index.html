@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VaxTrack Couple</title>
+    <title>Vaccines Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -11,17 +11,22 @@
         font-family: 'Inter', sans-serif;
         background-color: #f8fafc;
       }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      .animate-fade-in {
+        animation: fadeIn 0.2s ease-out forwards;
+      }
     </style>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "firebase/app": "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js",
-    "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js",
+    "react/": "https://esm.sh/react@^19.2.3/",
     "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "vite": "https://esm.sh/vite@^7.3.0",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
