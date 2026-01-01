@@ -53,7 +53,8 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
           if (parts[0]) setYear(parseInt(parts[0]));
           if (parts[1]) setMonth(parts[1]);
           else setMonth('');
-          if (parts[2]) setDay(parts[2]);
+          // Fix: Parse int to remove leading zeros (e.g. "05" -> "5") to match select options
+          if (parts[2]) setDay(parseInt(parts[2]).toString());
           else setDay('');
         }
 
@@ -63,7 +64,8 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
           if (parts[0]) setNextYear(parseInt(parts[0]));
           if (parts[1]) setNextMonth(parts[1]);
           else setNextMonth('');
-          if (parts[2]) setNextDay(parts[2]);
+          // Fix: Parse int to remove leading zeros
+          if (parts[2]) setNextDay(parseInt(parts[2]).toString());
           else setNextDay('');
         } else {
           setNextYear('');
@@ -79,6 +81,31 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
       }
     }
   }, [isOpen, vaccineToEdit, prefilledName]);
+
+  // Calculate days in month dynamically
+  const getDaysInMonth = (y: number | '', m: string) => {
+    if (!y || !m) return 31;
+    // new Date(y, monthIndex, 0) returns last day of previous month
+    // If m="01" (Jan), parseInt is 1. new Date(y, 1, 0) is Jan 31.
+    // If m="02" (Feb), parseInt is 2. new Date(y, 2, 0) is Feb 28 or 29.
+    return new Date(y as number, parseInt(m), 0).getDate();
+  };
+
+  const daysInCurrentMonth = useMemo(() => getDaysInMonth(year, month), [year, month]);
+  const daysInNextMonth = useMemo(() => getDaysInMonth(nextYear, nextMonth), [nextYear, nextMonth]);
+
+  // Clamp selections if they exceed the new month's days
+  useEffect(() => {
+    if (day && parseInt(day) > daysInCurrentMonth) {
+      setDay('');
+    }
+  }, [daysInCurrentMonth, day]);
+
+  useEffect(() => {
+    if (nextDay && parseInt(nextDay) > daysInNextMonth) {
+      setNextDay('');
+    }
+  }, [daysInNextMonth, nextDay]);
 
   // Filter suggestions: Show up to 5 common vaccines that the user DOES NOT have yet
   const suggestions = useMemo(() => {
@@ -152,8 +179,9 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
   // Helper for future years (Current - Current + 50)
   const futureYears = Array.from({ length: 51 }, (_, i) => currentYear + i);
   
-  // Helper for days
-  const days = Array.from({ length: 31 }, (_, i) => i + 1);
+  // Dynamic day lists
+  const currentDaysList = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
+  const nextDaysList = Array.from({ length: daysInNextMonth }, (_, i) => i + 1);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
@@ -250,7 +278,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                       disabled={!month}
                    >
                       <option value="">Day</option>
-                      {days.map(d => <option key={d} value={d}>{d}</option>)}
+                      {currentDaysList.map(d => <option key={d} value={d}>{d}</option>)}
                    </select>
                 </div>
              </div>
@@ -295,7 +323,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                       disabled={!nextMonth}
                    >
                       <option value="">Day</option>
-                      {days.map(d => <option key={d} value={d}>{d}</option>)}
+                      {nextDaysList.map(d => <option key={d} value={d}>{d}</option>)}
                    </select>
                 </div>
              </div>
