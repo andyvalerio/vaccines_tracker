@@ -225,9 +225,25 @@ function App() {
     return <AuthScreen />;
   }
 
-  const upcomingVaccines = vaccines.filter(v => 
-    v.nextDueDate && new Date(v.nextDueDate) > new Date()
-  ).sort((a, b) => new Date(a.nextDueDate!).getTime() - new Date(b.nextDueDate!).getTime());
+  // Filter Upcoming: Due date is valid, greater than "start of today", and less than "today + 6 months"
+  const upcomingVaccines = vaccines.filter(v => {
+    if (!v.nextDueDate) return false;
+    
+    // Parse the stored date string
+    const dueDate = new Date(v.nextDueDate);
+    // Check if invalid date
+    if (isNaN(dueDate.getTime())) return false;
+    
+    // Normalize "Today" to start of day (00:00:00) so we don't exclude things due today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Calculate 6 Months from now
+    const sixMonthsFromNow = new Date(today);
+    sixMonthsFromNow.setMonth(today.getMonth() + 6);
+
+    return dueDate >= today && dueDate <= sixMonthsFromNow;
+  }).sort((a, b) => new Date(a.nextDueDate!).getTime() - new Date(b.nextDueDate!).getTime());
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
@@ -265,7 +281,7 @@ function App() {
             {/* Upcoming Section */}
             {upcomingVaccines.length > 0 && (
               <div className="mb-8">
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-1">Upcoming Due Dates</h2>
+                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-1">Upcoming (Next 6 Months)</h2>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {upcomingVaccines.map(vaccine => (
                     <div 
@@ -296,7 +312,7 @@ function App() {
             {/* History Section */}
             <div className="mb-8">
               <div className="flex items-center justify-between mb-4 px-1">
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Record History</h2>
+                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">All Records</h2>
                 {vaccines.length > 0 && (
                   <button 
                     onClick={handleExportExcel}
