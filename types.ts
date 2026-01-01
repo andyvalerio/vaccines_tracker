@@ -8,7 +8,7 @@ export interface Vaccine {
   id: string;
   // profileId removed - vaccines now belong directly to the account/user
   name: string;
-  dateTaken: string;
+  dateTaken?: string; // Made optional
   nextDueDate?: string;
   notes?: string;
   createdAt: number;

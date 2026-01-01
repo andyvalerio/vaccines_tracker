@@ -6,7 +6,7 @@ const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
 export const GeminiService = {
-  analyzeVaccine: async (vaccineName: string, dateTaken: string): Promise<AiSuggestion> => {
+  analyzeVaccine: async (vaccineName: string, dateTaken?: string): Promise<AiSuggestion> => {
     if (!apiKey) {
       console.warn("No API Key available for Gemini.");
       return { nextDueDate: null, notes: "AI features unavailable without API Key.", isRecommended: false };
@@ -14,8 +14,15 @@ export const GeminiService = {
 
     try {
       const model = "gemini-3-flash-preview";
-      const prompt = `
-        I received the ${vaccineName} vaccine on ${dateTaken}.
+      
+      let prompt = `I received the ${vaccineName} vaccine`;
+      if (dateTaken) {
+         prompt += ` on ${dateTaken}.`;
+      } else {
+         prompt += `. I have not taken it yet, but I am planning to.`;
+      }
+      
+      prompt += `
         Based on general medical guidelines for adults, when is the next dose typically due?
         If it's a one-time vaccine, indicate that.
         Provide a very brief note (max 2 sentences) about what this vaccine protects against.

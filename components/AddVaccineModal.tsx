@@ -37,9 +37,10 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   
-  // Date Taken State
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState<number>(currentYear);
+
+  // Date Taken State (Now Optional)
+  const [year, setYear] = useState<number | ''>(''); 
   const [month, setMonth] = useState<string>('');
   const [day, setDay] = useState<string>('');
 
@@ -62,9 +63,12 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
           if (parts[0]) setYear(parseInt(parts[0]));
           if (parts[1]) setMonth(parts[1]);
           else setMonth('');
-          // Fix: Parse int to remove leading zeros (e.g. "05" -> "5") to match select options
           if (parts[2]) setDay(parseInt(parts[2]).toString());
           else setDay('');
+        } else {
+          setYear('');
+          setMonth('');
+          setDay('');
         }
 
         // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Next Due Date
@@ -73,7 +77,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
           if (parts[0]) setNextYear(parseInt(parts[0]));
           if (parts[1]) setNextMonth(parts[1]);
           else setNextMonth('');
-          // Fix: Parse int to remove leading zeros
           if (parts[2]) setNextDay(parseInt(parts[2]).toString());
           else setNextDay('');
         } else {
@@ -94,9 +97,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
   // Calculate days in month dynamically
   const getDaysInMonth = (y: number | '', m: string) => {
     if (!y || !m) return 31;
-    // new Date(y, monthIndex, 0) returns last day of previous month
-    // If m="01" (Jan), parseInt is 1. new Date(y, 1, 0) is Jan 31.
-    // If m="02" (Feb), parseInt is 2. new Date(y, 2, 0) is Feb 28 or 29.
     return new Date(y as number, parseInt(m), 0).getDate();
   };
 
@@ -116,37 +116,26 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
     }
   }, [daysInNextMonth, nextDay]);
 
-  // Filter suggestions: Mix of User Suggestions (AI) + Common Defaults
+  // Filter suggestions
   const quickAddOptions = useMemo(() => {
     const options: string[] = [];
-
-    // 1. Add specific AI suggestions first (if not already recorded)
     userSuggestions.forEach(s => {
-      // Check if user already has this vaccine name roughly
       const alreadyHas = existingVaccines.some(v => v.name.toLowerCase() === s.name.toLowerCase());
       if (!alreadyHas) {
         options.push(s.name);
       }
     });
-
-    // 2. Fill the rest with Common Vaccines until we have 5
     for (const common of COMMON_VACCINES) {
       if (options.length >= 5) break;
-
-      // Check if already in options
       if (options.includes(common)) continue;
-
-      // Check if user already has it (fuzzy match)
       const commonRoot = common.split(' ')[0].toLowerCase();
       const alreadyHas = existingVaccines.some(v => 
         v.name.toLowerCase().includes(commonRoot)
       );
-
       if (!alreadyHas) {
         options.push(common);
       }
     }
-
     return options;
   }, [existingVaccines, userSuggestions]);
 
@@ -156,11 +145,15 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
     e.preventDefault();
 
     // Construct fuzzy date string for Date Taken
-    let dateStr = `${year}`;
-    if (month) {
-      dateStr += `-${month}`;
-      if (day) {
-        dateStr += `-${day.padStart(2, '0')}`;
+    // Only construct if Year is selected
+    let dateStr: string | undefined = undefined;
+    if (year) {
+      dateStr = `${year}`;
+      if (month) {
+        dateStr += `-${month}`;
+        if (day) {
+          dateStr += `-${day.padStart(2, '0')}`;
+        }
       }
     }
 
@@ -179,9 +172,12 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
     const vaccine: Vaccine = {
       id: vaccineToEdit ? vaccineToEdit.id : Date.now().toString(),
       name,
-      dateTaken: dateStr,
       createdAt: vaccineToEdit ? vaccineToEdit.createdAt : Date.now(),
     };
+
+    if (dateStr) {
+      vaccine.dateTaken = dateStr;
+    }
 
     if (notes.trim()) {
       vaccine.notes = notes.trim();
@@ -198,7 +194,8 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
 
   const resetForm = () => {
     setName('');
-    setYear(currentYear);
+    // Default to empty for new entries to allow "Planned" vaccines
+    setYear('');
     setMonth('');
     setDay('');
     setNotes('');
@@ -207,13 +204,9 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
     setNextDay('');
   };
 
-  // Helper for generating year options (1950 - Current)
   const years = Array.from({ length: currentYear - 1949 }, (_, i) => currentYear - i);
-  
-  // Helper for future years (Current - Current + 50)
   const futureYears = Array.from({ length: 51 }, (_, i) => currentYear + i);
   
-  // Dynamic day lists
   const currentDaysList = Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1);
   const nextDaysList = Array.from({ length: daysInNextMonth }, (_, i) => i + 1);
 
@@ -228,7 +221,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Name with Suggestions */}
+          {/* Name */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Vaccine Name {vaccineToEdit && <span className="text-xs font-normal text-slate-400 ml-1">(Cannot change name)</span>}
@@ -254,7 +247,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
                   <option key={v} value={v} />
                 ))}
               </datalist>
-              {/* Fallback for visual helper - Only show on Add mode when empty and not prefilled */}
               {!vaccineToEdit && name.length === 0 && quickAddOptions.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {quickAddOptions.map(s => (
@@ -272,23 +264,24 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
             </div>
           </div>
           
-          {/* Flexible Date Selection */}
           <div className="grid grid-cols-1 gap-5">
              <div className="">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Date Taken</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date Taken (Optional)</label>
                 <div className="flex gap-2">
                    <select 
                       className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
                       value={year}
-                      onChange={(e) => setYear(parseInt(e.target.value))}
+                      onChange={(e) => setYear(e.target.value ? parseInt(e.target.value) : '')}
                    >
+                      <option value="">Year...</option>
                       {years.map(y => <option key={y} value={y}>{y}</option>)}
                    </select>
 
                    <select 
-                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900 disabled:opacity-50"
                       value={month}
                       onChange={(e) => setMonth(e.target.value)}
+                      disabled={!year}
                    >
                       <option value="">Month...</option>
                       <option value="01">Jan</option>
@@ -318,7 +311,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
              </div>
 
              <div className="">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Next Due Date</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Next Due Date (Optional)</label>
                 <div className="flex gap-2">
                    <select 
                       className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"

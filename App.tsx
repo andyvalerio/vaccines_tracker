@@ -5,7 +5,7 @@ import { AuthService } from './services/authService';
 import { ExportService } from './services/exportService';
 import { GeminiService } from './services/geminiService';
 import { Account, Vaccine, Suggestion } from './types';
-import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon } from './components/Icons';
+import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, WarningIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
 
 function App() {
@@ -19,14 +19,10 @@ function App() {
   const [editingVaccine, setEditingVaccine] = useState<Vaccine | null>(null);
   const [prefilledName, setPrefilledName] = useState<string>('');
   
-  // Track if we have performed the initial suggestion check to avoid loops
   const [hasCheckedSuggestions, setHasCheckedSuggestions] = useState(false);
-  // Suggestion specific loading state
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  // Specific ID of suggestion being accepted
   const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null);
   
-  // UI State for suggestions visibility
   const [isSuggestionsExpanded, setIsSuggestionsExpanded] = useState(true);
 
   // Load Session & Realtime Data via Firebase
@@ -38,18 +34,30 @@ function App() {
       if (firebaseUser) {
         try {
           setInitError(null);
-          // 1. Initialize Account (Maps firebase user to internal account type)
           const syncedAccount = await StorageService.initializeAccount(firebaseUser);
           setAccount(syncedAccount);
           
-          // 2. Subscribe to Realtime Data
           unsubscribeVaccines = StorageService.subscribeVaccines(syncedAccount.id, (loadedVaccines) => {
-            // Sort by date taken descending
-            const sorted = loadedVaccines.sort((a, b) => new Date(b.dateTaken).getTime() - new Date(a.dateTaken).getTime());
+            // Sort by status: Missing dates first (action needed), then by date taken descending (newest first)
+            const sorted = loadedVaccines.sort((a, b) => {
+               const aMissing = !a.dateTaken;
+               const bMissing = !b.dateTaken;
+
+               // If both missing, keep stable or sort by name/creation.
+               if (aMissing && bMissing) return 0;
+               
+               // If A is missing date, it goes to the TOP (-1)
+               if (aMissing) return -1;
+               
+               // If B is missing date, it goes to the TOP (1)
+               if (bMissing) return 1;
+
+               // Both have dates. Newest date first.
+               return new Date(b.dateTaken!).getTime() - new Date(a.dateTaken!).getTime();
+            });
             setVaccines(sorted);
           });
 
-          // 3. Subscribe to Suggestions
           unsubscribeSuggestions = StorageService.subscribeSuggestions(syncedAccount.id, (loadedSuggestions) => {
             setSuggestions(loadedSuggestions);
           });
@@ -66,7 +74,6 @@ function App() {
         setInitError(null);
         setHasCheckedSuggestions(false);
         
-        // Cleanup subscriptions
         if (unsubscribeVaccines) unsubscribeVaccines();
         if (unsubscribeSuggestions) unsubscribeSuggestions();
       }
@@ -85,7 +92,6 @@ function App() {
     const checkSuggestions = async () => {
       if (!account || hasCheckedSuggestions || vaccines.length === 0 || loadingSuggestions) return;
       
-      // If we already have stored suggestions, don't generate more
       if (suggestions.length > 0) {
         setHasCheckedSuggestions(true);
         return;
@@ -107,7 +113,6 @@ function App() {
       }
     };
 
-    // Small delay to ensure firebase data is fully synced before checking
     const timeout = setTimeout(() => {
         checkSuggestions();
     }, 2000);
@@ -128,7 +133,6 @@ function App() {
         await StorageService.updateVaccine(account.id, vaccine);
       } else {
         await StorageService.addVaccine(account.id, vaccine);
-        // If this came from a suggestion, remove that suggestion
         if (activeSuggestionId) {
             await StorageService.removeSuggestion(account.id, activeSuggestionId);
         }
@@ -156,9 +160,7 @@ function App() {
   const handleDismissSuggestion = async (suggestion: Suggestion) => {
     if (!account) return;
     try {
-      // Remove from suggestions list
       await StorageService.removeSuggestion(account.id, suggestion.id);
-      // Add to dismissed list so AI doesn't pick it up again
       await StorageService.addToDismissed(account.id, suggestion.name);
     } catch (e) {
       console.error("Failed to dismiss suggestion", e);
@@ -196,7 +198,6 @@ function App() {
     );
   }
 
-  // Error State - e.g. Permission Denied or Database Connection Failed
   if (initError) {
      return (
        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
@@ -225,20 +226,14 @@ function App() {
     return <AuthScreen />;
   }
 
-  // Filter Upcoming: Due date is valid, greater than "start of today", and less than "today + 6 months"
   const upcomingVaccines = vaccines.filter(v => {
     if (!v.nextDueDate) return false;
-    
-    // Parse the stored date string
     const dueDate = new Date(v.nextDueDate);
-    // Check if invalid date
     if (isNaN(dueDate.getTime())) return false;
     
-    // Normalize "Today" to start of day (00:00:00) so we don't exclude things due today
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Calculate 6 Months from now
     const sixMonthsFromNow = new Date(today);
     sixMonthsFromNow.setMonth(today.getMonth() + 6);
 
@@ -247,7 +242,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -296,7 +290,9 @@ function App() {
                             Due: {vaccine.nextDueDate}
                           </span>
                         </div>
-                        <p className="text-slate-400 text-sm mt-1">Last taken: {vaccine.dateTaken}</p>
+                        <p className="text-slate-400 text-sm mt-1">
+                            {vaccine.dateTaken ? `Last taken: ${vaccine.dateTaken}` : 'Scheduled (Not taken yet)'}
+                        </p>
                         {vaccine.notes && (
                             <p className="mt-3 text-sm text-white/90 bg-white/5 p-2 rounded-lg border border-white/5">
                                 {vaccine.notes}
@@ -343,7 +339,17 @@ function App() {
                       <div className="flex-1 mr-4">
                         <h3 className="font-bold text-slate-800 text-lg">{vaccine.name}</h3>
                         <div className="flex items-center gap-2 text-slate-500 text-sm mt-1 flex-wrap">
-                          <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium whitespace-nowrap">Taken: {vaccine.dateTaken}</span>
+                          {vaccine.dateTaken ? (
+                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium whitespace-nowrap">
+                                Taken: {vaccine.dateTaken}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded text-amber-700 font-medium whitespace-nowrap border border-amber-200">
+                                <WarningIcon className="w-3.5 h-3.5" />
+                                Missing
+                            </span>
+                          )}
+                          
                           {vaccine.nextDueDate && (
                             <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium whitespace-nowrap">Next: {vaccine.nextDueDate}</span>
                           )}
