@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Vaccine } from '../types';
+import { PencilIcon } from './Icons';
 
 interface AddVaccineModalProps {
   isOpen: boolean;
@@ -160,13 +161,20 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Name with Suggestions */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Vaccine Name</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Vaccine Name {vaccineToEdit && <span className="text-xs font-normal text-slate-400 ml-1">(Cannot change name)</span>}
+            </label>
             <div className="relative">
               <input
                 type="text"
                 required
+                disabled={!!vaccineToEdit}
                 list="vaccine-suggestions"
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className={`w-full px-3 py-2 rounded-lg border outline-none transition-colors ${
+                  vaccineToEdit 
+                    ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed' 
+                    : 'bg-white text-slate-900 border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                }`}
                 placeholder="e.g. Tetanus, Flu Shot"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -201,7 +209,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                 <label className="block text-sm font-medium text-slate-700 mb-1">Date Taken</label>
                 <div className="flex gap-2">
                    <select 
-                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
                       value={year}
                       onChange={(e) => setYear(parseInt(e.target.value))}
                    >
@@ -209,7 +217,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                    </select>
 
                    <select 
-                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
                       value={month}
                       onChange={(e) => setMonth(e.target.value)}
                    >
@@ -229,7 +237,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                    </select>
 
                    <select 
-                      className="w-20 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:opacity-50"
+                      className="w-20 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900 disabled:opacity-50"
                       value={day}
                       onChange={(e) => setDay(e.target.value)}
                       disabled={!month}
@@ -244,7 +252,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                 <label className="block text-sm font-medium text-slate-700 mb-1">Next Due Date</label>
                 <div className="flex gap-2">
                    <select 
-                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
                       value={nextYear}
                       onChange={(e) => setNextYear(e.target.value ? parseInt(e.target.value) : '')}
                    >
@@ -253,7 +261,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                    </select>
 
                    <select 
-                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:opacity-50"
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900 disabled:opacity-50"
                       value={nextMonth}
                       onChange={(e) => setNextMonth(e.target.value)}
                       disabled={!nextYear}
@@ -274,7 +282,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                    </select>
 
                    <select 
-                      className="w-20 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:opacity-50"
+                      className="w-20 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900 disabled:opacity-50"
                       value={nextDay}
                       onChange={(e) => setNextDay(e.target.value)}
                       disabled={!nextMonth}
@@ -289,7 +297,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
             <textarea
-              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none"
+              className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none h-24 resize-none bg-white text-slate-900 shadow-sm"
               placeholder="Side effects, batch number, clinic location..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
