@@ -1,0 +1,5 @@
+{
+  "name": "VaxTrack",
+  "description": "Personal and family immunization tracker. secure, private, and powered by Gemini.",
+  "requestFramePermissions": []
+}
