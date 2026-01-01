@@ -5,7 +5,6 @@ interface AddVaccineModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (vaccine: Vaccine) => void;
-  activeUser: { id: string, name: string };
   existingVaccines: Vaccine[];
 }
 
@@ -22,7 +21,7 @@ const COMMON_VACCINES = [
   "Meningococcal"
 ];
 
-const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAdd, activeUser, existingVaccines }) => {
+const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAdd, existingVaccines }) => {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   
@@ -57,7 +56,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
 
     const newVaccine: Vaccine = {
       id: Date.now().toString(),
-      profileId: activeUser.id,
       name,
       dateTaken: dateStr,
       createdAt: Date.now(),
@@ -91,7 +89,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
         <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-slate-800">Add Record for {activeUser.name}</h2>
+          <h2 className="text-xl font-semibold text-slate-800">Add New Record</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         

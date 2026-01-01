@@ -2,17 +2,13 @@ import React, { useState, useEffect } from 'react';
 import AuthScreen from './components/AuthScreen';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { Account, Profile, Vaccine } from './types';
+import { Account, Vaccine } from './types';
 import { PlusIcon, TrashIcon, CalendarIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
 
 function App() {
   const [account, setAccount] = useState<Account | null>(null);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [activeProfileId, setActiveProfileId] = useState<string>('');
-  
-  // We now store all vaccines for the account and filter based on selection
-  const [allVaccines, setAllVaccines] = useState<Vaccine[]>([]);
+  const [vaccines, setVaccines] = useState<Vaccine[]>([]);
   
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
@@ -20,33 +16,21 @@ function App() {
 
   // Load Session & Realtime Data via Firebase
   useEffect(() => {
-    let unsubscribeProfiles: (() => void) | undefined;
     let unsubscribeVaccines: (() => void) | undefined;
 
     const unsubscribeAuth = AuthService.subscribe(async (firebaseUser) => {
       if (firebaseUser) {
         try {
           setInitError(null);
-          // 1. Initialize Account (Check if profiles exist in DB)
-          // If this fails (e.g. permission denied, network), we catch it below.
+          // 1. Initialize Account (Maps firebase user to internal account type)
           const syncedAccount = await StorageService.initializeAccount(firebaseUser);
           setAccount(syncedAccount);
           
           // 2. Subscribe to Realtime Data
-          unsubscribeProfiles = StorageService.subscribeProfiles(syncedAccount.id, (loadedProfiles) => {
-             setProfiles(loadedProfiles);
-             
-             setActiveProfileId(prev => {
-               if (prev && loadedProfiles.find(p => p.id === prev)) return prev;
-               const primary = loadedProfiles.find(p => p.isPrimary) || loadedProfiles[0];
-               return primary ? primary.id : '';
-             });
-          });
-
           unsubscribeVaccines = StorageService.subscribeVaccines(syncedAccount.id, (loadedVaccines) => {
             // Sort by date taken descending
             const sorted = loadedVaccines.sort((a, b) => new Date(b.dateTaken).getTime() - new Date(a.dateTaken).getTime());
-            setAllVaccines(sorted);
+            setVaccines(sorted);
           });
 
         } catch (e: any) {
@@ -56,13 +40,10 @@ function App() {
         }
       } else {
         setAccount(null);
-        setProfiles([]);
-        setAllVaccines([]);
-        setActiveProfileId('');
+        setVaccines([]);
         setInitError(null);
         
         // Cleanup subscriptions
-        if (unsubscribeProfiles) unsubscribeProfiles();
         if (unsubscribeVaccines) unsubscribeVaccines();
       }
       setIsLoadingAuth(false);
@@ -70,7 +51,6 @@ function App() {
 
     return () => {
       unsubscribeAuth();
-      if (unsubscribeProfiles) unsubscribeProfiles();
       if (unsubscribeVaccines) unsubscribeVaccines();
     };
   }, []);
@@ -123,7 +103,7 @@ function App() {
            </div>
            <h2 className="text-xl font-bold text-slate-900 mb-2">Something went wrong</h2>
            <p className="text-slate-500 mb-6">
-             We couldn't load your profile data. This usually happens if the database rules prevent access or if the connection configuration is missing.
+             We couldn't load your data. This usually happens if the database rules prevent access or if the connection configuration is missing.
            </p>
            <div className="bg-slate-100 p-3 rounded text-left mb-6 overflow-x-auto">
              <code className="text-xs text-red-600 font-mono whitespace-pre-wrap">{initError}</code>
@@ -140,21 +120,9 @@ function App() {
     return <AuthScreen />;
   }
 
-  // Derive view data from state
-  const activeProfile = profiles.find(p => p.id === activeProfileId);
-  const visibleVaccines = allVaccines.filter(v => v.profileId === activeProfileId);
-  
-  const upcomingVaccines = visibleVaccines.filter(v => 
+  const upcomingVaccines = vaccines.filter(v => 
     v.nextDueDate && new Date(v.nextDueDate) > new Date()
   ).sort((a, b) => new Date(a.nextDueDate!).getTime() - new Date(b.nextDueDate!).getTime());
-
-  const getDashboardTitle = (profile: Profile) => {
-    if (profile.isPrimary) return "My Dashboard";
-    if (profile.name.toLowerCase() === 'me') return "My Dashboard";
-    
-    const name = profile.name;
-    return name.endsWith('s') ? `${name}' Dashboard` : `${name}'s Dashboard`;
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
@@ -171,6 +139,7 @@ function App() {
           </div>
           
           <div className="flex items-center gap-4">
+             <span className="text-sm text-slate-500 hidden sm:inline-block">Hi, {account.name.split(' ')[0]}</span>
              <button onClick={handleLogout} className="text-sm text-slate-400 hover:text-slate-600 font-medium">
               Sign Out
             </button>
@@ -180,35 +149,10 @@ function App() {
 
       <main className="max-w-4xl mx-auto px-4 py-6">
         
-        {/* Profile Switcher */}
-        <div className="mb-8">
-           <div className="flex items-center gap-2 mb-3">
-             <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Tracking Profile</h2>
-           </div>
-           
-           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {profiles.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => setActiveProfileId(p.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium whitespace-nowrap transition-all ${
-                    activeProfileId === p.id 
-                      ? 'bg-slate-800 text-white border-slate-800 shadow-md' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  <span className={`w-2 h-2 rounded-full ${p.color === 'rose' ? 'bg-rose-400' : 'bg-blue-400'}`}></span>
-                  {p.name} {(p.isPrimary && p.name.toLowerCase() !== 'me') && '(Me)'}
-                </button>
-              ))}
-           </div>
-        </div>
-
-        {activeProfile && (
-          <div className="animate-fade-in">
+        <div className="animate-fade-in">
              <div className="flex justify-between items-end mb-6">
                 <div>
-                   <h1 className="text-2xl font-bold text-slate-900">{getDashboardTitle(activeProfile)}</h1>
+                   <h1 className="text-2xl font-bold text-slate-900">My Dashboard</h1>
                    <p className="text-slate-500">Managing immunizations</p>
                 </div>
              </div>
@@ -243,17 +187,17 @@ function App() {
             <div>
               <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-1">Record History</h2>
               
-              {visibleVaccines.length === 0 ? (
+              {vaccines.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-300 mb-4">
                     <CalendarIcon className="w-8 h-8" />
                   </div>
                   <h3 className="text-slate-900 font-medium text-lg">No records found</h3>
-                  <p className="text-slate-500 mt-1 max-w-xs mx-auto">Start tracking by adding {activeProfile.isPrimary ? 'your' : `${activeProfile.name}'s`} first vaccine record.</p>
+                  <p className="text-slate-500 mt-1 max-w-xs mx-auto">Start tracking by adding your first vaccine record.</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {visibleVaccines.map(vaccine => (
+                  {vaccines.map(vaccine => (
                     <div key={vaccine.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start group">
                       <div>
                         <h3 className="font-bold text-slate-800 text-lg">{vaccine.name}</h3>
@@ -280,34 +224,28 @@ function App() {
               )}
             </div>
           </div>
-        )}
       </main>
 
       {/* Floating Action Button */}
-      {activeProfile && (
-        <div className="fixed bottom-6 right-6 z-30">
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg shadow-blue-300 hover:shadow-xl hover:scale-105 transition-all duration-200 group"
-            aria-label="Add Vaccine"
-          >
-            <PlusIcon className="w-7 h-7" />
-            <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity">
-              Add Record
-            </span>
-          </button>
-        </div>
-      )}
+      <div className="fixed bottom-6 right-6 z-30">
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg shadow-blue-300 hover:shadow-xl hover:scale-105 transition-all duration-200 group"
+          aria-label="Add Vaccine"
+        >
+          <PlusIcon className="w-7 h-7" />
+          <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity">
+            Add Record
+          </span>
+        </button>
+      </div>
 
-      {activeProfile && (
-        <AddVaccineModal 
-          isOpen={isModalOpen} 
-          onClose={() => setIsModalOpen(false)} 
-          onAdd={handleAddVaccine}
-          activeUser={{ id: activeProfile.id, name: activeProfile.name }}
-          existingVaccines={visibleVaccines}
-        />
-      )}
+      <AddVaccineModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+        onAdd={handleAddVaccine}
+        existingVaccines={vaccines}
+      />
     </div>
   );
 }

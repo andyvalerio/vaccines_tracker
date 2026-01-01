@@ -4,17 +4,9 @@ export interface Account {
   name: string;
 }
 
-export interface Profile {
-  id: string;
-  accountId: string;
-  name: string;
-  isPrimary: boolean; // The profile created for the account holder
-  color: string; // UI decoration
-}
-
 export interface Vaccine {
   id: string;
-  profileId: string; // Links to Profile.id
+  // profileId removed - vaccines now belong directly to the account/user
   name: string;
   dateTaken: string;
   nextDueDate?: string;

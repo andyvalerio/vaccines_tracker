@@ -1,38 +1,19 @@
-import { Vaccine, Account, Profile } from '../types';
+import { Vaccine, Account } from '../types';
 import { User } from 'firebase/auth';
 import { db } from '../firebaseConfig';
-import { ref, set, push, remove, get, onValue, off, DatabaseReference } from 'firebase/database';
+import { ref, set, push, remove, onValue, off } from 'firebase/database';
 
 export const StorageService = {
 
   // --- Initialization ---
   
   /**
-   * Ensures the user has a root node and a default profile in Firebase.
-   * Returns the Account object.
+   * Simply maps the Firebase User to our Account type.
+   * No longer creates database nodes for profiles.
    */
   initializeAccount: async (user: User): Promise<Account> => {
-    const accountId = user.uid;
-    const profilesRef = ref(db, `users/${accountId}/profiles`);
-    
-    // Check if profiles exist
-    const snapshot = await get(profilesRef);
-    
-    if (!snapshot.exists()) {
-      // Create default profile
-      const newProfileRef = push(profilesRef);
-      const newProfile: Profile = {
-        id: newProfileRef.key!,
-        accountId: accountId,
-        name: user.displayName || 'Me',
-        isPrimary: true,
-        color: 'blue'
-      };
-      await set(newProfileRef, newProfile);
-    }
-
     return {
-      id: accountId,
+      id: user.uid,
       name: user.displayName || 'User',
       email: user.email || ''
     };
@@ -41,29 +22,7 @@ export const StorageService = {
   // --- Realtime Subscriptions ---
 
   /**
-   * Subscribes to the user's profiles.
-   * Returns an unsubscribe function.
-   */
-  subscribeProfiles: (accountId: string, onUpdate: (profiles: Profile[]) => void): () => void => {
-    const profilesRef = ref(db, `users/${accountId}/profiles`);
-    
-    const listener = onValue(profilesRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        onUpdate([]);
-        return;
-      }
-      // Convert Object { id1: {...}, id2: {...} } to Array [{...}, {...}]
-      const list = Object.values(data) as Profile[];
-      onUpdate(list);
-    });
-
-    return () => off(profilesRef, 'value', listener);
-  },
-
-  /**
-   * Subscribes to ALL vaccines for the user (across all profiles).
-   * Filtering is done client-side for smoother UI updates.
+   * Subscribes to ALL vaccines for the user.
    */
   subscribeVaccines: (accountId: string, onUpdate: (vaccines: Vaccine[]) => void): () => void => {
     const vaccinesRef = ref(db, `users/${accountId}/vaccines`);
@@ -82,22 +41,6 @@ export const StorageService = {
   },
 
   // --- Write Operations ---
-
-  addProfile: async (accountId: string, name: string): Promise<void> => {
-    const colors = ['rose', 'amber', 'emerald', 'violet', 'cyan'];
-    const profilesRef = ref(db, `users/${accountId}/profiles`);
-    const newRef = push(profilesRef);
-    
-    const newProfile: Profile = {
-      id: newRef.key!,
-      accountId,
-      name,
-      isPrimary: false,
-      color: colors[Math.floor(Math.random() * colors.length)]
-    };
-    
-    await set(newRef, newProfile);
-  },
 
   addVaccine: async (accountId: string, vaccine: Vaccine): Promise<void> => {
     const vaccinesRef = ref(db, `users/${accountId}/vaccines`);
