@@ -10,65 +10,96 @@ function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string>('');
-  const [vaccines, setVaccines] = useState<Vaccine[]>([]);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   
+  // We now store all vaccines for the account and filter based on selection
+  const [allVaccines, setAllVaccines] = useState<Vaccine[]>([]);
+  
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Load Session via Firebase
+  // Load Session & Realtime Data via Firebase
   useEffect(() => {
-    const unsubscribe = AuthService.subscribe((firebaseUser) => {
+    let unsubscribeProfiles: (() => void) | undefined;
+    let unsubscribeVaccines: (() => void) | undefined;
+
+    const unsubscribeAuth = AuthService.subscribe(async (firebaseUser) => {
       if (firebaseUser) {
-        // Sync Firebase User with our Local Storage Data Structure
-        const syncedAccount = StorageService.syncFirebaseUser(firebaseUser);
-        setAccount(syncedAccount);
-        
-        // Load data associated with this account
-        const userProfiles = StorageService.getProfiles(syncedAccount.id);
-        setProfiles(userProfiles);
-        
-        if (userProfiles.length > 0) {
-          const primary = userProfiles.find(p => p.isPrimary) || userProfiles[0];
-          setActiveProfileId(primary.id);
-          refreshVaccines(primary.id);
+        try {
+          setInitError(null);
+          // 1. Initialize Account (Check if profiles exist in DB)
+          // If this fails (e.g. permission denied, network), we catch it below.
+          const syncedAccount = await StorageService.initializeAccount(firebaseUser);
+          setAccount(syncedAccount);
+          
+          // 2. Subscribe to Realtime Data
+          unsubscribeProfiles = StorageService.subscribeProfiles(syncedAccount.id, (loadedProfiles) => {
+             setProfiles(loadedProfiles);
+             
+             setActiveProfileId(prev => {
+               if (prev && loadedProfiles.find(p => p.id === prev)) return prev;
+               const primary = loadedProfiles.find(p => p.isPrimary) || loadedProfiles[0];
+               return primary ? primary.id : '';
+             });
+          });
+
+          unsubscribeVaccines = StorageService.subscribeVaccines(syncedAccount.id, (loadedVaccines) => {
+            // Sort by date taken descending
+            const sorted = loadedVaccines.sort((a, b) => new Date(b.dateTaken).getTime() - new Date(a.dateTaken).getTime());
+            setAllVaccines(sorted);
+          });
+
+        } catch (e: any) {
+          console.error("Failed to init data", e);
+          setInitError(e.message || "Unknown initialization error");
+          setAccount(null);
         }
       } else {
         setAccount(null);
         setProfiles([]);
-        setVaccines([]);
+        setAllVaccines([]);
+        setActiveProfileId('');
+        setInitError(null);
+        
+        // Cleanup subscriptions
+        if (unsubscribeProfiles) unsubscribeProfiles();
+        if (unsubscribeVaccines) unsubscribeVaccines();
       }
       setIsLoadingAuth(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfiles) unsubscribeProfiles();
+      if (unsubscribeVaccines) unsubscribeVaccines();
+    };
   }, []);
-
-  const refreshVaccines = (profileId: string) => {
-    const vax = StorageService.getVaccines(profileId);
-    setVaccines(vax.sort((a, b) => new Date(b.dateTaken).getTime() - new Date(a.dateTaken).getTime()));
-  };
-
-  // Switch Profile
-  useEffect(() => {
-    if (activeProfileId) {
-      refreshVaccines(activeProfileId);
-    }
-  }, [activeProfileId]);
 
   const handleLogout = async () => {
     await AuthService.logout();
-    // State clearing is handled by the subscription above
+    setInitError(null);
+    setAccount(null);
   };
 
-  const handleAddVaccine = (vaccine: Vaccine) => {
-    StorageService.addVaccine(vaccine);
-    refreshVaccines(activeProfileId);
+  const handleAddVaccine = async (vaccine: Vaccine) => {
+    if (!account) return;
+    try {
+      await StorageService.addVaccine(account.id, vaccine);
+    } catch (e) {
+      console.error("Failed to add vaccine", e);
+      alert("Failed to save record. Check your connection.");
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
+    if (!account) return;
     if (window.confirm('Are you sure you want to delete this record?')) {
-      StorageService.deleteVaccine(id);
-      refreshVaccines(activeProfileId);
+      try {
+        await StorageService.deleteVaccine(account.id, id);
+      } catch (e) {
+        console.error("Failed to delete", e);
+        alert("Failed to delete record.");
+      }
     }
   };
 
@@ -80,17 +111,43 @@ function App() {
     );
   }
 
+  // Error State - e.g. Permission Denied or Database Connection Failed
+  if (initError) {
+     return (
+       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-red-100 text-center">
+           <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4 mx-auto">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+           </div>
+           <h2 className="text-xl font-bold text-slate-900 mb-2">Something went wrong</h2>
+           <p className="text-slate-500 mb-6">
+             We couldn't load your profile data. This usually happens if the database rules prevent access or if the connection configuration is missing.
+           </p>
+           <div className="bg-slate-100 p-3 rounded text-left mb-6 overflow-x-auto">
+             <code className="text-xs text-red-600 font-mono whitespace-pre-wrap">{initError}</code>
+           </div>
+           <button onClick={handleLogout} className="bg-slate-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-slate-800 transition">
+             Sign Out & Try Again
+           </button>
+         </div>
+       </div>
+     );
+  }
+
   if (!account) {
     return <AuthScreen />;
   }
 
+  // Derive view data from state
   const activeProfile = profiles.find(p => p.id === activeProfileId);
+  const visibleVaccines = allVaccines.filter(v => v.profileId === activeProfileId);
   
-  const upcomingVaccines = vaccines.filter(v => 
+  const upcomingVaccines = visibleVaccines.filter(v => 
     v.nextDueDate && new Date(v.nextDueDate) > new Date()
   ).sort((a, b) => new Date(a.nextDueDate!).getTime() - new Date(b.nextDueDate!).getTime());
 
-  // Helper to determine dashboard title
   const getDashboardTitle = (profile: Profile) => {
     if (profile.isPrimary) return "My Dashboard";
     if (profile.name.toLowerCase() === 'me') return "My Dashboard";
@@ -144,7 +201,6 @@ function App() {
                   {p.name} {(p.isPrimary && p.name.toLowerCase() !== 'me') && '(Me)'}
                 </button>
               ))}
-              {/* Add Person button removed as requested */}
            </div>
         </div>
 
@@ -187,7 +243,7 @@ function App() {
             <div>
               <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-1">Record History</h2>
               
-              {vaccines.length === 0 ? (
+              {visibleVaccines.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
                   <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-300 mb-4">
                     <CalendarIcon className="w-8 h-8" />
@@ -197,7 +253,7 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {vaccines.map(vaccine => (
+                  {visibleVaccines.map(vaccine => (
                     <div key={vaccine.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start group">
                       <div>
                         <h3 className="font-bold text-slate-800 text-lg">{vaccine.name}</h3>
@@ -249,7 +305,7 @@ function App() {
           onClose={() => setIsModalOpen(false)} 
           onAdd={handleAddVaccine}
           activeUser={{ id: activeProfile.id, name: activeProfile.name }}
-          existingVaccines={vaccines}
+          existingVaccines={visibleVaccines}
         />
       )}
     </div>

@@ -1,35 +1,34 @@
 import { Vaccine, Account, Profile } from '../types';
 import { User } from 'firebase/auth';
+import { db } from '../firebaseConfig';
+import { ref, set, push, remove, get, onValue, off, DatabaseReference } from 'firebase/database';
 
-const STORAGE_KEYS = {
-  PROFILES: 'vt_profiles',
-  VACCINES: 'vt_vaccines',
-};
-
-// This service now manages LOCAL DATA only. 
-// Authentication is handled by Firebase.
 export const StorageService = {
 
-  // --- Sync Logic ---
-  // Ensure that when a Firebase User logs in, we have a local "Profile" structure for them
-  // so the existing UI code continues to work using localStorage as the DB.
-  syncFirebaseUser: (user: User): Account => {
+  // --- Initialization ---
+  
+  /**
+   * Ensures the user has a root node and a default profile in Firebase.
+   * Returns the Account object.
+   */
+  initializeAccount: async (user: User): Promise<Account> => {
     const accountId = user.uid;
-    const allProfiles = StorageService._getAllProfiles();
+    const profilesRef = ref(db, `users/${accountId}/profiles`);
     
-    // Check if we already have profiles for this account
-    const existingProfiles = allProfiles.filter(p => p.accountId === accountId);
-
-    if (existingProfiles.length === 0) {
-      // First time login on this device? Create default profile.
+    // Check if profiles exist
+    const snapshot = await get(profilesRef);
+    
+    if (!snapshot.exists()) {
+      // Create default profile
+      const newProfileRef = push(profilesRef);
       const newProfile: Profile = {
-        id: 'prof_' + Date.now(),
+        id: newProfileRef.key!,
         accountId: accountId,
         name: user.displayName || 'Me',
         isPrimary: true,
         color: 'blue'
       };
-      StorageService._saveProfiles([newProfile]);
+      await set(newProfileRef, newProfile);
     }
 
     return {
@@ -39,55 +38,86 @@ export const StorageService = {
     };
   },
 
-  // --- Profiles ---
+  // --- Realtime Subscriptions ---
 
-  getProfiles: (accountId: string): Profile[] => {
-    const all = StorageService._getAllProfiles();
-    return all.filter(p => p.accountId === accountId);
+  /**
+   * Subscribes to the user's profiles.
+   * Returns an unsubscribe function.
+   */
+  subscribeProfiles: (accountId: string, onUpdate: (profiles: Profile[]) => void): () => void => {
+    const profilesRef = ref(db, `users/${accountId}/profiles`);
+    
+    const listener = onValue(profilesRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        onUpdate([]);
+        return;
+      }
+      // Convert Object { id1: {...}, id2: {...} } to Array [{...}, {...}]
+      const list = Object.values(data) as Profile[];
+      onUpdate(list);
+    });
+
+    return () => off(profilesRef, 'value', listener);
   },
 
-  addProfile: (accountId: string, name: string): Profile => {
+  /**
+   * Subscribes to ALL vaccines for the user (across all profiles).
+   * Filtering is done client-side for smoother UI updates.
+   */
+  subscribeVaccines: (accountId: string, onUpdate: (vaccines: Vaccine[]) => void): () => void => {
+    const vaccinesRef = ref(db, `users/${accountId}/vaccines`);
+    
+    const listener = onValue(vaccinesRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        onUpdate([]);
+        return;
+      }
+      const list = Object.values(data) as Vaccine[];
+      onUpdate(list);
+    });
+
+    return () => off(vaccinesRef, 'value', listener);
+  },
+
+  // --- Write Operations ---
+
+  addProfile: async (accountId: string, name: string): Promise<void> => {
     const colors = ['rose', 'amber', 'emerald', 'violet', 'cyan'];
+    const profilesRef = ref(db, `users/${accountId}/profiles`);
+    const newRef = push(profilesRef);
+    
     const newProfile: Profile = {
-      id: 'prof_' + Date.now() + Math.random().toString().slice(2, 5),
+      id: newRef.key!,
       accountId,
       name,
       isPrimary: false,
       color: colors[Math.floor(Math.random() * colors.length)]
     };
-    StorageService._saveProfiles([newProfile]);
-    return newProfile;
+    
+    await set(newRef, newProfile);
   },
 
-  // --- Vaccines ---
-
-  getVaccines: (profileId: string): Vaccine[] => {
-    const all = StorageService._getAllVaccines();
-    return all.filter(v => v.profileId === profileId);
+  addVaccine: async (accountId: string, vaccine: Vaccine): Promise<void> => {
+    const vaccinesRef = ref(db, `users/${accountId}/vaccines`);
+    // If ID is already generated (e.g. from the modal), use it, otherwise push new
+    const newItemRef = vaccine.id ? ref(db, `users/${accountId}/vaccines/${vaccine.id}`) : push(vaccinesRef);
+    
+    const finalVaccine = { ...vaccine, id: newItemRef.key! };
+    
+    // Safety: Remove any keys that are undefined because Firebase set() throws an error on undefined
+    Object.keys(finalVaccine).forEach(key => {
+        if ((finalVaccine as any)[key] === undefined) {
+            delete (finalVaccine as any)[key];
+        }
+    });
+    
+    await set(newItemRef, finalVaccine);
   },
 
-  addVaccine: (vaccine: Vaccine): void => {
-    const all = StorageService._getAllVaccines();
-    localStorage.setItem(STORAGE_KEYS.VACCINES, JSON.stringify([vaccine, ...all]));
-  },
-
-  deleteVaccine: (id: string): void => {
-    const all = StorageService._getAllVaccines();
-    localStorage.setItem(STORAGE_KEYS.VACCINES, JSON.stringify(all.filter(v => v.id !== id)));
-  },
-
-  // --- Internal Helpers ---
-
-  _getAllProfiles: (): Profile[] => {
-    return JSON.parse(localStorage.getItem(STORAGE_KEYS.PROFILES) || '[]');
-  },
-
-  _saveProfiles: (newProfiles: Profile[]) => {
-    const all = StorageService._getAllProfiles();
-    localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify([...all, ...newProfiles]));
-  },
-
-  _getAllVaccines: (): Vaccine[] => {
-    return JSON.parse(localStorage.getItem(STORAGE_KEYS.VACCINES) || '[]');
+  deleteVaccine: async (accountId: string, vaccineId: string): Promise<void> => {
+    const itemRef = ref(db, `users/${accountId}/vaccines/${vaccineId}`);
+    await remove(itemRef);
   }
 };

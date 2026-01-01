@@ -25,7 +25,6 @@ const COMMON_VACCINES = [
 const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAdd, activeUser, existingVaccines }) => {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
-  const [nextDueDate, setNextDueDate] = useState('');
   
   // Date State
   const currentYear = new Date().getFullYear();
@@ -34,7 +33,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
   const [day, setDay] = useState<string>('');
 
   // Filter suggestions: Show up to 5 common vaccines that the user DOES NOT have yet
-  // MOVED UP: Must be called before any early return to satisfy Rules of Hooks
   const suggestions = useMemo(() => {
     return COMMON_VACCINES.filter(common => 
       !existingVaccines.some(existing => 
@@ -43,7 +41,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
     ).slice(0, 5);
   }, [existingVaccines]);
 
-  // MOVED DOWN: Early return must happen after hooks
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -63,10 +60,14 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
       profileId: activeUser.id,
       name,
       dateTaken: dateStr,
-      nextDueDate: nextDueDate || undefined,
-      notes: notes || undefined,
       createdAt: Date.now(),
     };
+
+    // Only add notes if they exist to avoid passing empty strings or undefined to strict database rules if changed later
+    if (notes.trim()) {
+      newVaccine.notes = notes.trim();
+    }
+
     onAdd(newVaccine);
     resetForm();
     onClose();
@@ -78,7 +79,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
     setMonth('');
     setDay('');
     setNotes('');
-    setNextDueDate('');
   };
 
   // Helper for generating year options (1950 - Current)
@@ -177,16 +177,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
                    </select>
                 </div>
              </div>
-          </div>
-
-          <div>
-             <label className="block text-sm font-medium text-slate-700 mb-1">Next Due (Optional)</label>
-              <input
-                type="date"
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
-                value={nextDueDate}
-                onChange={(e) => setNextDueDate(e.target.value)}
-              />
           </div>
 
           <div>
