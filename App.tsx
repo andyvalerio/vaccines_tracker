@@ -3,7 +3,7 @@ import AuthScreen from './components/AuthScreen';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { Account, Vaccine } from './types';
-import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon } from './components/Icons';
+import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
 
 function App() {
@@ -13,6 +13,7 @@ function App() {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingVaccine, setEditingVaccine] = useState<Vaccine | null>(null);
 
   // Load Session & Realtime Data via Firebase
   useEffect(() => {
@@ -61,14 +62,28 @@ function App() {
     setAccount(null);
   };
 
-  const handleAddVaccine = async (vaccine: Vaccine) => {
+  const handleSaveVaccine = async (vaccine: Vaccine) => {
     if (!account) return;
     try {
-      await StorageService.addVaccine(account.id, vaccine);
+      if (editingVaccine) {
+        await StorageService.updateVaccine(account.id, vaccine);
+      } else {
+        await StorageService.addVaccine(account.id, vaccine);
+      }
     } catch (e) {
-      console.error("Failed to add vaccine", e);
+      console.error("Failed to save vaccine", e);
       alert("Failed to save record. Check your connection.");
     }
+  };
+
+  const handleEdit = (vaccine: Vaccine) => {
+    setEditingVaccine(vaccine);
+    setIsModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setEditingVaccine(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -245,10 +260,11 @@ function App() {
                 <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-1">Upcoming Due Dates</h2>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {upcomingVaccines.map(vaccine => (
-                    <div key={vaccine.id} className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group border border-slate-700">
-                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition">
-                        <CalendarIcon className="w-16 h-16" />
-                      </div>
+                    <div 
+                      key={vaccine.id} 
+                      onClick={() => handleEdit(vaccine)}
+                      className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group border border-slate-700 cursor-pointer hover:scale-[1.01] transition-transform"
+                    >
                       <div className="relative z-10">
                         <div className="flex justify-between items-start">
                           <h3 className="font-bold text-lg">{vaccine.name}</h3>
@@ -257,7 +273,11 @@ function App() {
                           </span>
                         </div>
                         <p className="text-slate-400 text-sm mt-1">Last taken: {vaccine.dateTaken}</p>
-                        {vaccine.notes && <p className="mt-3 text-sm text-white/90 bg-white/5 p-2 rounded-lg border border-white/5">{vaccine.notes}</p>}
+                        {vaccine.notes && (
+                            <p className="mt-3 text-sm text-white/90 bg-white/5 p-2 rounded-lg border border-white/5">
+                                {vaccine.notes}
+                            </p>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -291,26 +311,39 @@ function App() {
               ) : (
                 <div className="space-y-3">
                   {vaccines.map(vaccine => (
-                    <div key={vaccine.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start group">
-                      <div>
+                    <div 
+                      key={vaccine.id} 
+                      onClick={() => handleEdit(vaccine)}
+                      className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex justify-between items-start group hover:border-blue-200"
+                    >
+                      <div className="flex-1 mr-4">
                         <h3 className="font-bold text-slate-800 text-lg">{vaccine.name}</h3>
-                        <div className="flex items-center gap-2 text-slate-500 text-sm mt-1">
-                          <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium">Taken: {vaccine.dateTaken}</span>
+                        <div className="flex items-center gap-2 text-slate-500 text-sm mt-1 flex-wrap">
+                          <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium whitespace-nowrap">Taken: {vaccine.dateTaken}</span>
                           {vaccine.nextDueDate && (
-                            <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium">Next: {vaccine.nextDueDate}</span>
+                            <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium whitespace-nowrap">Next: {vaccine.nextDueDate}</span>
                           )}
                         </div>
                         {vaccine.notes && (
                           <p className="text-slate-500 text-sm mt-3 leading-relaxed max-w-lg">{vaccine.notes}</p>
                         )}
                       </div>
-                      <button 
-                        onClick={() => handleDelete(vaccine.id)}
-                        className="text-slate-300 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
-                        title="Delete record"
-                      >
-                        <TrashIcon className="w-5 h-5" />
-                      </button>
+                      <div className="flex gap-1">
+                         <button 
+                          onClick={(e) => { e.stopPropagation(); handleEdit(vaccine); }}
+                          className="text-slate-300 hover:text-blue-600 p-2 rounded-full hover:bg-blue-50 transition-colors"
+                          title="Edit record"
+                        >
+                          <PencilIcon className="w-5 h-5" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleDelete(vaccine.id); }}
+                          className="text-slate-300 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
+                          title="Delete record"
+                        >
+                          <TrashIcon className="w-5 h-5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -322,7 +355,7 @@ function App() {
       {/* Floating Action Button */}
       <div className="fixed bottom-6 right-6 z-30">
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { setEditingVaccine(null); setIsModalOpen(true); }}
           className="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg shadow-blue-300 hover:shadow-xl hover:scale-105 transition-all duration-200 group"
           aria-label="Add Vaccine"
         >
@@ -335,9 +368,10 @@ function App() {
 
       <AddVaccineModal 
         isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onAdd={handleAddVaccine}
+        onClose={handleModalClose} 
+        onSave={handleSaveVaccine}
         existingVaccines={vaccines}
+        vaccineToEdit={editingVaccine}
       />
     </div>
   );

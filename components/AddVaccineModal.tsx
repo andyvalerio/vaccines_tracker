@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Vaccine } from '../types';
 
 interface AddVaccineModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdd: (vaccine: Vaccine) => void;
+  onSave: (vaccine: Vaccine) => void;
   existingVaccines: Vaccine[];
+  vaccineToEdit?: Vaccine | null;
 }
 
 const COMMON_VACCINES = [
@@ -21,15 +22,55 @@ const COMMON_VACCINES = [
   "Meningococcal"
 ];
 
-const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAdd, existingVaccines }) => {
+const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSave, existingVaccines, vaccineToEdit }) => {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   
-  // Date State
+  // Date Taken State
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState<number>(currentYear);
   const [month, setMonth] = useState<string>('');
   const [day, setDay] = useState<string>('');
+
+  // Next Due Date State
+  const [nextYear, setNextYear] = useState<number | ''>('');
+  const [nextMonth, setNextMonth] = useState<string>('');
+  const [nextDay, setNextDay] = useState<string>('');
+
+  // Load data for editing
+  useEffect(() => {
+    if (isOpen && vaccineToEdit) {
+      setName(vaccineToEdit.name);
+      setNotes(vaccineToEdit.notes || '');
+      
+      // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Date Taken
+      if (vaccineToEdit.dateTaken) {
+        const parts = vaccineToEdit.dateTaken.split('-');
+        if (parts[0]) setYear(parseInt(parts[0]));
+        if (parts[1]) setMonth(parts[1]);
+        else setMonth('');
+        if (parts[2]) setDay(parts[2]);
+        else setDay('');
+      }
+
+      // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Next Due Date
+      if (vaccineToEdit.nextDueDate) {
+        const parts = vaccineToEdit.nextDueDate.split('-');
+        if (parts[0]) setNextYear(parseInt(parts[0]));
+        if (parts[1]) setNextMonth(parts[1]);
+        else setNextMonth('');
+        if (parts[2]) setNextDay(parts[2]);
+        else setNextDay('');
+      } else {
+        setNextYear('');
+        setNextMonth('');
+        setNextDay('');
+      }
+
+    } else if (isOpen && !vaccineToEdit) {
+      resetForm();
+    }
+  }, [isOpen, vaccineToEdit]);
 
   // Filter suggestions: Show up to 5 common vaccines that the user DOES NOT have yet
   const suggestions = useMemo(() => {
@@ -45,7 +86,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Construct fuzzy date string
+    // Construct fuzzy date string for Date Taken
     let dateStr = `${year}`;
     if (month) {
       dateStr += `-${month}`;
@@ -54,19 +95,34 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
       }
     }
 
-    const newVaccine: Vaccine = {
-      id: Date.now().toString(),
-      name,
-      dateTaken: dateStr,
-      createdAt: Date.now(),
-    };
-
-    // Only add notes if they exist to avoid passing empty strings or undefined to strict database rules if changed later
-    if (notes.trim()) {
-      newVaccine.notes = notes.trim();
+    // Construct fuzzy date string for Next Due Date
+    let nextDueDateStr = '';
+    if (nextYear) {
+      nextDueDateStr = `${nextYear}`;
+      if (nextMonth) {
+        nextDueDateStr += `-${nextMonth}`;
+        if (nextDay) {
+          nextDueDateStr += `-${nextDay.padStart(2, '0')}`;
+        }
+      }
     }
 
-    onAdd(newVaccine);
+    const vaccine: Vaccine = {
+      id: vaccineToEdit ? vaccineToEdit.id : Date.now().toString(),
+      name,
+      dateTaken: dateStr,
+      createdAt: vaccineToEdit ? vaccineToEdit.createdAt : Date.now(),
+    };
+
+    if (notes.trim()) {
+      vaccine.notes = notes.trim();
+    }
+    
+    if (nextDueDateStr) {
+      vaccine.nextDueDate = nextDueDateStr;
+    }
+
+    onSave(vaccine);
     resetForm();
     onClose();
   };
@@ -77,10 +133,16 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
     setMonth('');
     setDay('');
     setNotes('');
+    setNextYear('');
+    setNextMonth('');
+    setNextDay('');
   };
 
   // Helper for generating year options (1950 - Current)
   const years = Array.from({ length: currentYear - 1949 }, (_, i) => currentYear - i);
+  
+  // Helper for future years (Current - Current + 50)
+  const futureYears = Array.from({ length: 51 }, (_, i) => currentYear + i);
   
   // Helper for days
   const days = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -89,7 +151,9 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
         <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-slate-800">Add New Record</h2>
+          <h2 className="text-xl font-semibold text-slate-800">
+            {vaccineToEdit ? 'Edit Record' : 'Add New Record'}
+          </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         
@@ -113,8 +177,8 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
                   <option key={v} value={v} />
                 ))}
               </datalist>
-              {/* Fallback for visual helper */}
-              {name.length === 0 && suggestions.length > 0 && (
+              {/* Fallback for visual helper - Only show on Add mode when empty */}
+              {!vaccineToEdit && name.length === 0 && suggestions.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {suggestions.map(s => (
                     <button
@@ -132,9 +196,9 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
           </div>
           
           {/* Flexible Date Selection */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-             <div className="col-span-1 sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Date Taken (Approximate OK)</label>
+          <div className="grid grid-cols-1 gap-5">
+             <div className="">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date Taken</label>
                 <div className="flex gap-2">
                    <select 
                       className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
@@ -175,6 +239,51 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
                    </select>
                 </div>
              </div>
+
+             <div className="">
+                <label className="block text-sm font-medium text-slate-700 mb-1">Next Due Date</label>
+                <div className="flex gap-2">
+                   <select 
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                      value={nextYear}
+                      onChange={(e) => setNextYear(e.target.value ? parseInt(e.target.value) : '')}
+                   >
+                      <option value="">Year...</option>
+                      {futureYears.map(y => <option key={y} value={y}>{y}</option>)}
+                   </select>
+
+                   <select 
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:opacity-50"
+                      value={nextMonth}
+                      onChange={(e) => setNextMonth(e.target.value)}
+                      disabled={!nextYear}
+                   >
+                      <option value="">Month...</option>
+                      <option value="01">Jan</option>
+                      <option value="02">Feb</option>
+                      <option value="03">Mar</option>
+                      <option value="04">Apr</option>
+                      <option value="05">May</option>
+                      <option value="06">Jun</option>
+                      <option value="07">Jul</option>
+                      <option value="08">Aug</option>
+                      <option value="09">Sep</option>
+                      <option value="10">Oct</option>
+                      <option value="11">Nov</option>
+                      <option value="12">Dec</option>
+                   </select>
+
+                   <select 
+                      className="w-20 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white disabled:opacity-50"
+                      value={nextDay}
+                      onChange={(e) => setNextDay(e.target.value)}
+                      disabled={!nextMonth}
+                   >
+                      <option value="">Day</option>
+                      {days.map(d => <option key={d} value={d}>{d}</option>)}
+                   </select>
+                </div>
+             </div>
           </div>
 
           <div>
@@ -199,7 +308,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onAd
               type="submit"
               className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition shadow-md"
             >
-              Save Record
+              {vaccineToEdit ? 'Update Record' : 'Save Record'}
             </button>
           </div>
         </form>

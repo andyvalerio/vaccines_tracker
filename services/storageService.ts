@@ -59,6 +59,22 @@ export const StorageService = {
     await set(newItemRef, finalVaccine);
   },
 
+  updateVaccine: async (accountId: string, vaccine: Vaccine): Promise<void> => {
+    if (!vaccine.id) throw new Error("Cannot update vaccine without ID");
+    
+    const itemRef = ref(db, `users/${accountId}/vaccines/${vaccine.id}`);
+    
+    // Safety: Remove any keys that are undefined
+    const finalVaccine = { ...vaccine };
+    Object.keys(finalVaccine).forEach(key => {
+        if ((finalVaccine as any)[key] === undefined) {
+            delete (finalVaccine as any)[key];
+        }
+    });
+
+    await set(itemRef, finalVaccine);
+  },
+
   deleteVaccine: async (accountId: string, vaccineId: string): Promise<void> => {
     const itemRef = ref(db, `users/${accountId}/vaccines/${vaccineId}`);
     await remove(itemRef);
