@@ -5,7 +5,7 @@ import { AuthService } from './services/authService';
 import { ExportService } from './services/exportService';
 import { GeminiService } from './services/geminiService';
 import { Account, Vaccine, Suggestion } from './types';
-import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, WarningIcon } from './components/Icons';
+import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, WarningIcon, CheckIcon, XMarkIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
 
 function App() {
@@ -87,7 +87,7 @@ function App() {
     };
   }, []);
 
-  // AI Suggestion Logic
+  // AI Suggestion Logic for Missing Vaccines (Group Suggestions)
   useEffect(() => {
     const checkSuggestions = async () => {
       if (!account || hasCheckedSuggestions || vaccines.length === 0 || loadingSuggestions) return;
@@ -119,6 +119,56 @@ function App() {
 
     return () => clearTimeout(timeout);
   }, [account, vaccines, suggestions.length, hasCheckedSuggestions, loadingSuggestions]);
+
+  // AI Analysis Logic for Existing Vaccines (Next Due Date)
+  useEffect(() => {
+    if (!account) return;
+
+    // Find a vaccine that:
+    // 1. Doesn't have a next due date set by user.
+    // 2. Hasn't been analyzed yet (status undefined or null).
+    // 3. Hasn't been dismissed by user (status != 'dismissed').
+    const candidate = vaccines.find(v => 
+      !v.nextDueDate && 
+      !v.analysisStatus
+    );
+
+    if (candidate) {
+      const analyze = async () => {
+        try {
+          // 1. Set status to loading to prevent double calls
+          await StorageService.updateVaccine(account.id, {
+            ...candidate,
+            analysisStatus: 'loading'
+          });
+
+          // 2. Call backend
+          const result = await GeminiService.analyzeVaccine(candidate.name, candidate.dateTaken);
+
+          // 3. Update with result
+          await StorageService.updateVaccine(account.id, {
+            ...candidate,
+            analysisStatus: 'completed',
+            suggestedNextDueDate: result.nextDueDate,
+            suggestedNotes: result.notes,
+            // If API says not recommended to have next shot, we can consider it 'accepted' empty state or just leave as completed
+          });
+        } catch (err) {
+          console.error("Analysis failed", err);
+          // Set to failed or reset so it might try again later?
+          // Let's set to dismissed for now to stop infinite loops on error
+          await StorageService.updateVaccine(account.id, {
+            ...candidate,
+            analysisStatus: 'dismissed' 
+          });
+        }
+      };
+      
+      // Debounce slightly
+      const timer = setTimeout(analyze, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [vaccines, account]);
 
   const handleLogout = async () => {
     await AuthService.logout();
@@ -164,6 +214,44 @@ function App() {
       await StorageService.addToDismissed(account.id, suggestion.name);
     } catch (e) {
       console.error("Failed to dismiss suggestion", e);
+    }
+  };
+
+  const handleAcceptAnalysis = async (vaccine: Vaccine, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!account || !vaccine.suggestedNextDueDate) return;
+
+    try {
+      const updatedNote = vaccine.notes 
+        ? `${vaccine.notes}\n\nAI Note: ${vaccine.suggestedNotes || ''}`
+        : vaccine.suggestedNotes || '';
+
+      await StorageService.updateVaccine(account.id, {
+        ...vaccine,
+        nextDueDate: vaccine.suggestedNextDueDate,
+        notes: updatedNote.trim(),
+        suggestedNextDueDate: null,
+        suggestedNotes: null,
+        analysisStatus: 'accepted'
+      });
+    } catch (err) {
+      console.error("Failed to accept analysis", err);
+    }
+  };
+
+  const handleDismissAnalysis = async (vaccine: Vaccine, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!account) return;
+
+    try {
+      await StorageService.updateVaccine(account.id, {
+        ...vaccine,
+        suggestedNextDueDate: null,
+        suggestedNotes: null,
+        analysisStatus: 'dismissed'
+      });
+    } catch (err) {
+      console.error("Failed to dismiss analysis", err);
     }
   };
 
@@ -226,6 +314,7 @@ function App() {
     return <AuthScreen />;
   }
 
+  // Filter for dashboard "Upcoming" section - only show confirmed next dates, not suggestions
   const upcomingVaccines = vaccines.filter(v => {
     if (!v.nextDueDate) return false;
     const dueDate = new Date(v.nextDueDate);
@@ -334,53 +423,100 @@ function App() {
                     <div 
                       key={vaccine.id} 
                       onClick={() => handleEdit(vaccine)}
-                      className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex justify-between items-start group hover:border-blue-200"
+                      className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col group hover:border-blue-200"
                     >
-                      <div className="flex-1 mr-4">
-                        <h3 className="font-bold text-slate-800 text-lg">{vaccine.name}</h3>
-                        <div className="flex items-center gap-2 text-slate-500 text-sm mt-1 flex-wrap">
-                          {vaccine.dateTaken ? (
-                            <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium whitespace-nowrap">
-                                Taken: {vaccine.dateTaken}
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded text-amber-700 font-medium whitespace-nowrap border border-amber-200">
-                                <WarningIcon className="w-3.5 h-3.5" />
-                                Missing
-                            </span>
-                          )}
-                          
-                          {vaccine.nextDueDate && (
-                            <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium whitespace-nowrap">Next: {vaccine.nextDueDate}</span>
-                          )}
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 mr-4">
+                            <h3 className="font-bold text-slate-800 text-lg">{vaccine.name}</h3>
+                            <div className="flex items-center gap-2 text-slate-500 text-sm mt-1 flex-wrap">
+                            {vaccine.dateTaken ? (
+                                <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium whitespace-nowrap">
+                                    Taken: {vaccine.dateTaken}
+                                </span>
+                            ) : (
+                                <span className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded text-amber-700 font-medium whitespace-nowrap border border-amber-200">
+                                    <WarningIcon className="w-3.5 h-3.5" />
+                                    Missing
+                                </span>
+                            )}
+                            
+                            {vaccine.nextDueDate && (
+                                <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium whitespace-nowrap">Next: {vaccine.nextDueDate}</span>
+                            )}
+                            
+                            {/* Loading State for AI */}
+                            {!vaccine.nextDueDate && vaccine.analysisStatus === 'loading' && (
+                                <span className="text-purple-600 bg-purple-50 px-2 py-0.5 rounded font-medium whitespace-nowrap animate-pulse flex items-center gap-1">
+                                    <SparklesIcon className="w-3 h-3" />
+                                    Analyzing...
+                                </span>
+                            )}
+                            </div>
+                            {vaccine.notes && (
+                            <p className="text-slate-500 text-sm mt-3 leading-relaxed max-w-lg">{vaccine.notes}</p>
+                            )}
                         </div>
-                        {vaccine.notes && (
-                          <p className="text-slate-500 text-sm mt-3 leading-relaxed max-w-lg">{vaccine.notes}</p>
-                        )}
+                        <div className="flex gap-1">
+                            <button 
+                            onClick={(e) => { e.stopPropagation(); handleEdit(vaccine); }}
+                            className="text-slate-300 hover:text-blue-600 p-2 rounded-full hover:bg-blue-50 transition-colors"
+                            title="Edit record"
+                            >
+                            <PencilIcon className="w-5 h-5" />
+                            </button>
+                            <button 
+                            onClick={(e) => { e.stopPropagation(); handleDelete(vaccine.id); }}
+                            className="text-slate-300 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
+                            title="Delete record"
+                            >
+                            <TrashIcon className="w-5 h-5" />
+                            </button>
+                        </div>
                       </div>
-                      <div className="flex gap-1">
-                         <button 
-                          onClick={(e) => { e.stopPropagation(); handleEdit(vaccine); }}
-                          className="text-slate-300 hover:text-blue-600 p-2 rounded-full hover:bg-blue-50 transition-colors"
-                          title="Edit record"
-                        >
-                          <PencilIcon className="w-5 h-5" />
-                        </button>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); handleDelete(vaccine.id); }}
-                          className="text-slate-300 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
-                          title="Delete record"
-                        >
-                          <TrashIcon className="w-5 h-5" />
-                        </button>
-                      </div>
+
+                      {/* AI Suggestion Box */}
+                      {vaccine.suggestedNextDueDate && !vaccine.nextDueDate && (
+                        <div className="mt-4 bg-purple-50 border border-purple-100 rounded-lg p-3 relative overflow-hidden">
+                           <div className="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
+                           <div className="flex items-start gap-3">
+                              <SparklesIcon className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                              <div className="flex-1">
+                                 <p className="text-sm font-semibold text-purple-900 mb-1">
+                                    Suggested Next Due Date: {vaccine.suggestedNextDueDate}
+                                 </p>
+                                 {vaccine.suggestedNotes && (
+                                    <p className="text-xs text-purple-700 leading-relaxed mb-3">
+                                        {vaccine.suggestedNotes}
+                                    </p>
+                                 )}
+                                 <div className="flex gap-2">
+                                    <button 
+                                        onClick={(e) => handleAcceptAnalysis(vaccine, e)}
+                                        className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-md transition-colors shadow-sm"
+                                    >
+                                        <CheckIcon className="w-3.5 h-3.5" />
+                                        Accept & Set Date
+                                    </button>
+                                    <button 
+                                        onClick={(e) => handleDismissAnalysis(vaccine, e)}
+                                        className="flex items-center gap-1.5 bg-white border border-purple-200 hover:bg-purple-100 text-purple-700 text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+                                    >
+                                        <XMarkIcon className="w-3.5 h-3.5" />
+                                        Dismiss
+                                    </button>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
+                      )}
+
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Might Be Missing Section (AI Suggestions) */}
+            {/* Might Be Missing Section (AI Suggestions for New Vaccines) */}
             {suggestions.length > 0 && (
               <div className="mb-8 animate-fade-in">
                 <div 

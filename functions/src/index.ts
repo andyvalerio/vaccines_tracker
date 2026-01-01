@@ -17,9 +17,11 @@ export const analyzeVaccine = onCall({ secrets: [geminiApiKey], region: "europe-
 
   const { vaccineName, dateTaken } = request.data;
   const ai = getAiClient();
+  const today = new Date().toISOString().split('T')[0];
 
   try {
-    let prompt = `I received the ${vaccineName} vaccine`;
+    let prompt = `Current Date: ${today}.\n`;
+    prompt += `I received the ${vaccineName} vaccine`;
     if (dateTaken) {
        prompt += ` on ${dateTaken}.`;
     } else {
@@ -28,8 +30,10 @@ export const analyzeVaccine = onCall({ secrets: [geminiApiKey], region: "europe-
     
     prompt += `
       Based on general medical guidelines for adults, when is the next dose typically due?
-      If it's a one-time vaccine, indicate that.
-      Provide a very brief note (max 2 sentences) about what this vaccine protects against.
+      IMPORTANT: The 'nextDueDate' MUST be in the future (after ${today}). 
+      If the standard schedule implies a date in the past (meaning it is overdue), provide a date in the near future (e.g. 1 week from today) so I can schedule it.
+      If it's a one-time vaccine or no future dose is needed, set 'nextDueDate' to null.
+      Provide a very brief note (max 2 sentences) about why a next shot is needed.
       
       Return the response in JSON format with keys: 'nextDueDate' (YYYY-MM-DD or null), 'notes' (string), 'isRecommended' (boolean).
     `;
@@ -54,7 +58,17 @@ export const analyzeVaccine = onCall({ secrets: [geminiApiKey], region: "europe-
     const text = response.text;
     if (!text) throw new Error("Empty response from AI");
     
-    return JSON.parse(text);
+    const result = JSON.parse(text);
+
+    // Fallback safety check: If date is in past, move it to tomorrow
+    if (result.nextDueDate && result.nextDueDate < today) {
+       const d = new Date();
+       d.setDate(d.getDate() + 1); // Set to tomorrow
+       result.nextDueDate = d.toISOString().split('T')[0];
+       result.notes += " (Date adjusted to near future as it appeared overdue).";
+    }
+
+    return result;
 
   } catch (error) {
     console.error("Backend AI Error:", error);

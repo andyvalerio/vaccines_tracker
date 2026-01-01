@@ -12,6 +12,11 @@ export interface Vaccine {
   nextDueDate?: string;
   notes?: string;
   createdAt: number;
+  
+  // AI Analysis fields
+  analysisStatus?: 'loading' | 'completed' | 'dismissed' | 'accepted';
+  suggestedNextDueDate?: string | null;
+  suggestedNotes?: string | null;
 }
 
 export interface AiSuggestion {
