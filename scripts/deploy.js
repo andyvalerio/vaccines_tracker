@@ -12,9 +12,8 @@ async function deploy() {
 
   const localDist = path.join(__dirname, "../dist");
   
-  // CHANGED: Use 'public_html/vaccines' which is standard for shared hosting.
-  // This path is relative to your FTP user's root directory.
-  const remoteRoot = process.env.FTP_REMOTE_ROOT || "public_html/vaccines";
+  // CHANGED: Deploy to the root of the FTP user as the account is already scoped to the target folder.
+  const remoteRoot = process.env.FTP_REMOTE_ROOT || "/";
 
   if (!fs.existsSync(localDist)) {
     console.error("❌ 'dist' folder not found. Please run 'npm run build' first.");
@@ -35,7 +34,7 @@ async function deploy() {
 
     console.log("✅ Connected to FTP server");
 
-    // Ensure remote directory exists
+    // Ensure remote directory exists and switch to it
     await client.ensureDir(remoteRoot);
 
     console.log("DTO Uploading files...");
