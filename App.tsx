@@ -3,22 +3,36 @@ import AuthScreen from './components/AuthScreen';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
 import { ExportService } from './services/exportService';
-import { Account, Vaccine } from './types';
-import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon } from './components/Icons';
+import { GeminiService } from './services/geminiService';
+import { Account, Vaccine, Suggestion } from './types';
+import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
 
 function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [vaccines, setVaccines] = useState<Vaccine[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVaccine, setEditingVaccine] = useState<Vaccine | null>(null);
+  const [prefilledName, setPrefilledName] = useState<string>('');
+  
+  // Track if we have performed the initial suggestion check to avoid loops
+  const [hasCheckedSuggestions, setHasCheckedSuggestions] = useState(false);
+  // Suggestion specific loading state
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  // Specific ID of suggestion being accepted
+  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null);
+  
+  // UI State for suggestions visibility
+  const [isSuggestionsExpanded, setIsSuggestionsExpanded] = useState(true);
 
   // Load Session & Realtime Data via Firebase
   useEffect(() => {
     let unsubscribeVaccines: (() => void) | undefined;
+    let unsubscribeSuggestions: (() => void) | undefined;
 
     const unsubscribeAuth = AuthService.subscribe(async (firebaseUser) => {
       if (firebaseUser) {
@@ -35,6 +49,11 @@ function App() {
             setVaccines(sorted);
           });
 
+          // 3. Subscribe to Suggestions
+          unsubscribeSuggestions = StorageService.subscribeSuggestions(syncedAccount.id, (loadedSuggestions) => {
+            setSuggestions(loadedSuggestions);
+          });
+
         } catch (e: any) {
           console.error("Failed to init data", e);
           setInitError(e.message || "Unknown initialization error");
@@ -43,10 +62,13 @@ function App() {
       } else {
         setAccount(null);
         setVaccines([]);
+        setSuggestions([]);
         setInitError(null);
+        setHasCheckedSuggestions(false);
         
         // Cleanup subscriptions
         if (unsubscribeVaccines) unsubscribeVaccines();
+        if (unsubscribeSuggestions) unsubscribeSuggestions();
       }
       setIsLoadingAuth(false);
     });
@@ -54,8 +76,44 @@ function App() {
     return () => {
       unsubscribeAuth();
       if (unsubscribeVaccines) unsubscribeVaccines();
+      if (unsubscribeSuggestions) unsubscribeSuggestions();
     };
   }, []);
+
+  // AI Suggestion Logic
+  useEffect(() => {
+    const checkSuggestions = async () => {
+      if (!account || hasCheckedSuggestions || vaccines.length === 0 || loadingSuggestions) return;
+      
+      // If we already have stored suggestions, don't generate more
+      if (suggestions.length > 0) {
+        setHasCheckedSuggestions(true);
+        return;
+      }
+
+      setLoadingSuggestions(true);
+      try {
+        const dismissed = await StorageService.getDismissedNames(account.id);
+        const newSuggestions = await GeminiService.suggestMissingVaccines(vaccines, dismissed);
+        
+        if (newSuggestions.length > 0) {
+          await StorageService.setSuggestions(account.id, newSuggestions);
+        }
+      } catch (e) {
+        console.error("Error generating suggestions:", e);
+      } finally {
+        setLoadingSuggestions(false);
+        setHasCheckedSuggestions(true);
+      }
+    };
+
+    // Small delay to ensure firebase data is fully synced before checking
+    const timeout = setTimeout(() => {
+        checkSuggestions();
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [account, vaccines, suggestions.length, hasCheckedSuggestions, loadingSuggestions]);
 
   const handleLogout = async () => {
     await AuthService.logout();
@@ -70,6 +128,10 @@ function App() {
         await StorageService.updateVaccine(account.id, vaccine);
       } else {
         await StorageService.addVaccine(account.id, vaccine);
+        // If this came from a suggestion, remove that suggestion
+        if (activeSuggestionId) {
+            await StorageService.removeSuggestion(account.id, activeSuggestionId);
+        }
       }
     } catch (e) {
       console.error("Failed to save vaccine", e);
@@ -79,12 +141,35 @@ function App() {
 
   const handleEdit = (vaccine: Vaccine) => {
     setEditingVaccine(vaccine);
+    setPrefilledName('');
+    setActiveSuggestionId(null);
     setIsModalOpen(true);
+  };
+
+  const handleAddFromSuggestion = (suggestion: Suggestion) => {
+    setEditingVaccine(null);
+    setPrefilledName(suggestion.name);
+    setActiveSuggestionId(suggestion.id);
+    setIsModalOpen(true);
+  };
+
+  const handleDismissSuggestion = async (suggestion: Suggestion) => {
+    if (!account) return;
+    try {
+      // Remove from suggestions list
+      await StorageService.removeSuggestion(account.id, suggestion.id);
+      // Add to dismissed list so AI doesn't pick it up again
+      await StorageService.addToDismissed(account.id, suggestion.name);
+    } catch (e) {
+      console.error("Failed to dismiss suggestion", e);
+    }
   };
 
   const handleModalClose = () => {
     setIsModalOpen(false);
     setEditingVaccine(null);
+    setPrefilledName('');
+    setActiveSuggestionId(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -209,7 +294,7 @@ function App() {
             )}
 
             {/* History Section */}
-            <div>
+            <div className="mb-8">
               <div className="flex items-center justify-between mb-4 px-1">
                 <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Record History</h2>
                 {vaccines.length > 0 && (
@@ -272,13 +357,70 @@ function App() {
                 </div>
               )}
             </div>
+
+            {/* Might Be Missing Section (AI Suggestions) */}
+            {suggestions.length > 0 && (
+              <div className="mb-8 animate-fade-in">
+                <div 
+                  onClick={() => setIsSuggestionsExpanded(!isSuggestionsExpanded)}
+                  className="flex items-center justify-between mb-4 px-1 cursor-pointer group select-none"
+                >
+                  <div className="flex items-center gap-2">
+                    <SparklesIcon className="w-4 h-4 text-amber-500" />
+                    <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider group-hover:text-slate-600 transition-colors">
+                      Might Be Missing
+                      {!isSuggestionsExpanded && <span className="ml-2 text-xs normal-case font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">{suggestions.length} suggestions</span>}
+                    </h2>
+                  </div>
+                  <button className="text-slate-400 hover:text-slate-600">
+                    {isSuggestionsExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                  </button>
+                </div>
+                
+                {isSuggestionsExpanded && (
+                  <div className="grid gap-3 sm:grid-cols-2 animate-fade-in">
+                    {suggestions.map(suggestion => (
+                       <div 
+                        key={suggestion.id}
+                        className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex flex-col justify-between"
+                       >
+                          <div>
+                            <h3 className="font-bold text-amber-900 text-lg">{suggestion.name}</h3>
+                            <p className="text-amber-700/80 text-sm mt-1 mb-4">{suggestion.reason}</p>
+                          </div>
+                          <div className="flex gap-2">
+                             <button 
+                               onClick={() => handleAddFromSuggestion(suggestion)}
+                               className="flex-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-medium text-sm py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+                             >
+                               <PlusIcon className="w-4 h-4" />
+                               Add Record
+                             </button>
+                             <button 
+                               onClick={() => handleDismissSuggestion(suggestion)}
+                               className="bg-white hover:bg-amber-100 text-amber-600 border border-amber-200 p-2 rounded-lg transition-colors"
+                               title="Don't show this again"
+                             >
+                               <span className="sr-only">Dismiss</span>
+                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                             </button>
+                          </div>
+                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
           </div>
       </main>
 
       {/* Floating Action Button */}
       <div className="fixed bottom-6 right-6 z-30">
         <button
-          onClick={() => { setEditingVaccine(null); setIsModalOpen(true); }}
+          onClick={() => { setEditingVaccine(null); setPrefilledName(''); setActiveSuggestionId(null); setIsModalOpen(true); }}
           className="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg shadow-blue-300 hover:shadow-xl hover:scale-105 transition-all duration-200 group"
           aria-label="Add Vaccine"
         >
@@ -295,6 +437,7 @@ function App() {
         onSave={handleSaveVaccine}
         existingVaccines={vaccines}
         vaccineToEdit={editingVaccine}
+        prefilledName={prefilledName}
       />
     </div>
   );

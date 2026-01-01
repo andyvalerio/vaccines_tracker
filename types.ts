@@ -19,3 +19,9 @@ export interface AiSuggestion {
   notes: string;
   isRecommended: boolean;
 }
+
+export interface Suggestion {
+  id: string;
+  name: string;
+  reason: string;
+}

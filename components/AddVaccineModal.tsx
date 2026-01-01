@@ -8,6 +8,7 @@ interface AddVaccineModalProps {
   onSave: (vaccine: Vaccine) => void;
   existingVaccines: Vaccine[];
   vaccineToEdit?: Vaccine | null;
+  prefilledName?: string;
 }
 
 const COMMON_VACCINES = [
@@ -23,7 +24,7 @@ const COMMON_VACCINES = [
   "Meningococcal"
 ];
 
-const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSave, existingVaccines, vaccineToEdit }) => {
+const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSave, existingVaccines, vaccineToEdit, prefilledName }) => {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   
@@ -38,40 +39,46 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
   const [nextMonth, setNextMonth] = useState<string>('');
   const [nextDay, setNextDay] = useState<string>('');
 
-  // Load data for editing
+  // Load data for editing or prefilling
   useEffect(() => {
-    if (isOpen && vaccineToEdit) {
-      setName(vaccineToEdit.name);
-      setNotes(vaccineToEdit.notes || '');
-      
-      // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Date Taken
-      if (vaccineToEdit.dateTaken) {
-        const parts = vaccineToEdit.dateTaken.split('-');
-        if (parts[0]) setYear(parseInt(parts[0]));
-        if (parts[1]) setMonth(parts[1]);
-        else setMonth('');
-        if (parts[2]) setDay(parts[2]);
-        else setDay('');
-      }
+    if (isOpen) {
+      if (vaccineToEdit) {
+        // Edit Mode
+        setName(vaccineToEdit.name);
+        setNotes(vaccineToEdit.notes || '');
+        
+        // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Date Taken
+        if (vaccineToEdit.dateTaken) {
+          const parts = vaccineToEdit.dateTaken.split('-');
+          if (parts[0]) setYear(parseInt(parts[0]));
+          if (parts[1]) setMonth(parts[1]);
+          else setMonth('');
+          if (parts[2]) setDay(parts[2]);
+          else setDay('');
+        }
 
-      // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Next Due Date
-      if (vaccineToEdit.nextDueDate) {
-        const parts = vaccineToEdit.nextDueDate.split('-');
-        if (parts[0]) setNextYear(parseInt(parts[0]));
-        if (parts[1]) setNextMonth(parts[1]);
-        else setNextMonth('');
-        if (parts[2]) setNextDay(parts[2]);
-        else setNextDay('');
+        // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Next Due Date
+        if (vaccineToEdit.nextDueDate) {
+          const parts = vaccineToEdit.nextDueDate.split('-');
+          if (parts[0]) setNextYear(parseInt(parts[0]));
+          if (parts[1]) setNextMonth(parts[1]);
+          else setNextMonth('');
+          if (parts[2]) setNextDay(parts[2]);
+          else setNextDay('');
+        } else {
+          setNextYear('');
+          setNextMonth('');
+          setNextDay('');
+        }
       } else {
-        setNextYear('');
-        setNextMonth('');
-        setNextDay('');
+        // Add Mode (reset or prefill)
+        resetForm();
+        if (prefilledName) {
+          setName(prefilledName);
+        }
       }
-
-    } else if (isOpen && !vaccineToEdit) {
-      resetForm();
     }
-  }, [isOpen, vaccineToEdit]);
+  }, [isOpen, vaccineToEdit, prefilledName]);
 
   // Filter suggestions: Show up to 5 common vaccines that the user DOES NOT have yet
   const suggestions = useMemo(() => {
@@ -185,7 +192,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                   <option key={v} value={v} />
                 ))}
               </datalist>
-              {/* Fallback for visual helper - Only show on Add mode when empty */}
+              {/* Fallback for visual helper - Only show on Add mode when empty and not prefilled */}
               {!vaccineToEdit && name.length === 0 && suggestions.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {suggestions.map(s => (
