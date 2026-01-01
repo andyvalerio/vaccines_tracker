@@ -452,6 +452,7 @@ function App() {
         onClose={handleModalClose} 
         onSave={handleSaveVaccine}
         existingVaccines={vaccines}
+        userSuggestions={suggestions}
         vaccineToEdit={editingVaccine}
         prefilledName={prefilledName}
       />

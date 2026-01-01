@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Vaccine } from '../types';
+import { Vaccine, Suggestion } from '../types';
 import { PencilIcon } from './Icons';
 
 interface AddVaccineModalProps {
@@ -7,24 +7,33 @@ interface AddVaccineModalProps {
   onClose: () => void;
   onSave: (vaccine: Vaccine) => void;
   existingVaccines: Vaccine[];
+  userSuggestions: Suggestion[];
   vaccineToEdit?: Vaccine | null;
   prefilledName?: string;
 }
 
 const COMMON_VACCINES = [
   "Flu Shot (Influenza)",
-  "Tetanus (Tdap)",
-  "COVID-19",
-  "Hepatitis A",
-  "Hepatitis B",
-  "HPV (Gardasil)",
+  "Tetanus (Tdap/DTaP)",
   "MMR (Measles, Mumps, Rubella)",
-  "Shingles",
-  "Pneumococcal",
-  "Meningococcal"
+  "Hepatitis B",
+  "Polio (IPV)",
+  "Varicella (Chickenpox)",
+  "Pneumococcal (PCV)",
+  "Hepatitis A",
+  "HPV (Gardasil)",
+  "COVID-19"
 ];
 
-const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSave, existingVaccines, vaccineToEdit, prefilledName }) => {
+const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  existingVaccines, 
+  userSuggestions,
+  vaccineToEdit, 
+  prefilledName 
+}) => {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   
@@ -107,14 +116,39 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
     }
   }, [daysInNextMonth, nextDay]);
 
-  // Filter suggestions: Show up to 5 common vaccines that the user DOES NOT have yet
-  const suggestions = useMemo(() => {
-    return COMMON_VACCINES.filter(common => 
-      !existingVaccines.some(existing => 
-        existing.name.toLowerCase().includes(common.split(' ')[0].toLowerCase())
-      )
-    ).slice(0, 5);
-  }, [existingVaccines]);
+  // Filter suggestions: Mix of User Suggestions (AI) + Common Defaults
+  const quickAddOptions = useMemo(() => {
+    const options: string[] = [];
+
+    // 1. Add specific AI suggestions first (if not already recorded)
+    userSuggestions.forEach(s => {
+      // Check if user already has this vaccine name roughly
+      const alreadyHas = existingVaccines.some(v => v.name.toLowerCase() === s.name.toLowerCase());
+      if (!alreadyHas) {
+        options.push(s.name);
+      }
+    });
+
+    // 2. Fill the rest with Common Vaccines until we have 5
+    for (const common of COMMON_VACCINES) {
+      if (options.length >= 5) break;
+
+      // Check if already in options
+      if (options.includes(common)) continue;
+
+      // Check if user already has it (fuzzy match)
+      const commonRoot = common.split(' ')[0].toLowerCase();
+      const alreadyHas = existingVaccines.some(v => 
+        v.name.toLowerCase().includes(commonRoot)
+      );
+
+      if (!alreadyHas) {
+        options.push(common);
+      }
+    }
+
+    return options;
+  }, [existingVaccines, userSuggestions]);
 
   if (!isOpen) return null;
 
@@ -221,9 +255,9 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({ isOpen, onClose, onSa
                 ))}
               </datalist>
               {/* Fallback for visual helper - Only show on Add mode when empty and not prefilled */}
-              {!vaccineToEdit && name.length === 0 && suggestions.length > 0 && (
+              {!vaccineToEdit && name.length === 0 && quickAddOptions.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {suggestions.map(s => (
+                  {quickAddOptions.map(s => (
                     <button
                       key={s}
                       type="button"
