@@ -7,6 +7,7 @@ import { GeminiService } from './services/geminiService';
 import { Account, Vaccine, Suggestion } from './types';
 import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, WarningIcon, CheckIcon, XMarkIcon, ShieldCheckIcon } from './components/Icons';
 import AddVaccineModal from './components/AddVaccineModal';
+import ConfirmModal from './components/ConfirmModal';
 
 function App() {
   const [account, setAccount] = useState<Account | null>(null);
@@ -19,6 +20,8 @@ function App() {
   const [editingVaccine, setEditingVaccine] = useState<Vaccine | null>(null);
   const [prefilledName, setPrefilledName] = useState<string>('');
   
+  const [vaccineToDelete, setVaccineToDelete] = useState<Vaccine | null>(null);
+
   const [hasCheckedSuggestions, setHasCheckedSuggestions] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null);
@@ -273,15 +276,19 @@ function App() {
     setActiveSuggestionId(null);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!account) return;
-    if (window.confirm('Are you sure you want to delete this record?')) {
-      try {
-        await StorageService.deleteVaccine(account.id, id);
-      } catch (e) {
-        console.error("Failed to delete", e);
-        alert("Failed to delete record.");
-      }
+  // Replaces the old handleDelete that used window.confirm
+  const initiateDelete = (vaccine: Vaccine) => {
+    setVaccineToDelete(vaccine);
+  };
+
+  const confirmDelete = async () => {
+    if (!account || !vaccineToDelete) return;
+    try {
+      await StorageService.deleteVaccine(account.id, vaccineToDelete.id);
+      setVaccineToDelete(null);
+    } catch (e) {
+      console.error("Failed to delete", e);
+      alert("Failed to delete record.");
     }
   };
 
@@ -476,7 +483,7 @@ function App() {
                             <PencilIcon className="w-5 h-5" />
                             </button>
                             <button 
-                            onClick={(e) => { e.stopPropagation(); handleDelete(vaccine.id); }}
+                            onClick={(e) => { e.stopPropagation(); initiateDelete(vaccine); }}
                             className="text-slate-300 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
                             title="Delete record"
                             >
@@ -626,6 +633,14 @@ function App() {
         userSuggestions={suggestions}
         vaccineToEdit={editingVaccine}
         prefilledName={prefilledName}
+      />
+
+      <ConfirmModal 
+        isOpen={!!vaccineToDelete}
+        onClose={() => setVaccineToDelete(null)}
+        onConfirm={confirmDelete}
+        title="Delete Record?"
+        message={`Are you sure you want to remove ${vaccineToDelete?.name}? This action cannot be undone.`}
       />
     </div>
   );
