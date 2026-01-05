@@ -8,7 +8,8 @@ export interface Vaccine {
   id: string;
   // profileId removed - vaccines now belong directly to the account/user
   name: string;
-  dateTaken?: string; // Made optional
+  dateTaken?: string; // Represents the LATEST dose taken
+  history?: string[]; // Array of previous dates taken (ISO strings)
   nextDueDate?: string;
   notes?: string;
   createdAt: number;

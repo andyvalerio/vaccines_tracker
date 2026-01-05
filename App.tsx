@@ -20,7 +20,9 @@ function App() {
   const [editingVaccine, setEditingVaccine] = useState<Vaccine | null>(null);
   const [prefilledName, setPrefilledName] = useState<string>('');
   
+  // Modal states for delete and confirm dose
   const [vaccineToDelete, setVaccineToDelete] = useState<Vaccine | null>(null);
+  const [vaccineToConfirmDose, setVaccineToConfirmDose] = useState<Vaccine | null>(null);
 
   const [hasCheckedSuggestions, setHasCheckedSuggestions] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -151,7 +153,7 @@ function App() {
           });
 
           // 2. Call backend
-          const result = await GeminiService.analyzeVaccine(candidate.name, candidate.dateTaken);
+          const result = await GeminiService.analyzeVaccine(candidate.name, candidate.dateTaken, candidate.history);
 
           // 3. Update with result
           await StorageService.updateVaccine(account.id, {
@@ -186,8 +188,23 @@ function App() {
   const handleSaveVaccine = async (vaccine: Vaccine) => {
     if (!account) return;
     try {
+      // If we are editing, update. If new, add.
+      // Note: The AddVaccineModal might have modified the vaccine object 
+      // (e.g. Confirm Dose inside modal) so we just save whatever comes back.
       if (editingVaccine) {
-        await StorageService.updateVaccine(account.id, vaccine);
+        // If the user modified the nextDueDate or dateTaken inside the modal substantially, 
+        // we might want to reset analysisStatus. The modal clears it if they "Confirm Dose".
+        // But for general edits, we leave it unless handled elsewhere.
+        // For simplicity, if nextDueDate is cleared by user, we might want to re-analyze.
+        // The modal logic handles the object construction.
+        const vaccineToSave = { ...vaccine };
+        
+        // If nextDueDate was cleared and there is no analysis pending, reset it so AI runs again
+        if (!vaccineToSave.nextDueDate && vaccineToSave.analysisStatus === 'completed') {
+             vaccineToSave.analysisStatus = undefined;
+        }
+
+        await StorageService.updateVaccine(account.id, vaccineToSave);
       } else {
         await StorageService.addVaccine(account.id, vaccine);
         if (activeSuggestionId) {
@@ -269,6 +286,40 @@ function App() {
     }
   };
 
+  const initiateConfirmDose = (vaccine: Vaccine, e: React.MouseEvent) => {
+     e.stopPropagation();
+     setVaccineToConfirmDose(vaccine);
+  };
+
+  const executeConfirmDose = async () => {
+    if (!account || !vaccineToConfirmDose || !vaccineToConfirmDose.nextDueDate) return;
+
+    try {
+      const vaccine = vaccineToConfirmDose;
+      const newHistory = [...(vaccine.history || [])];
+      
+      // If there was a current 'dateTaken', move it to history
+      if (vaccine.dateTaken) {
+        newHistory.push(vaccine.dateTaken);
+      }
+
+      await StorageService.updateVaccine(account.id, {
+        ...vaccine,
+        dateTaken: vaccine.nextDueDate, // Promote Next Due to Current
+        history: newHistory, // Save old current to history
+        nextDueDate: undefined, // Clear next due date
+        analysisStatus: undefined, // Reset AI status to trigger re-analysis for NEW next date
+        suggestedNextDueDate: null,
+        suggestedNotes: null
+      });
+      
+      setVaccineToConfirmDose(null);
+    } catch(err) {
+      console.error("Failed to confirm dose", err);
+      alert("Failed to update record");
+    }
+  };
+
   const handleModalClose = () => {
     setIsModalOpen(false);
     setEditingVaccine(null);
@@ -276,7 +327,6 @@ function App() {
     setActiveSuggestionId(null);
   };
 
-  // Replaces the old handleDelete that used window.confirm
   const initiateDelete = (vaccine: Vaccine) => {
     setVaccineToDelete(vaccine);
   };
@@ -393,9 +443,14 @@ function App() {
                       <div className="relative z-10">
                         <div className="flex justify-between items-start">
                           <h3 className="font-bold text-lg">{vaccine.name}</h3>
-                          <span className="text-xs bg-white/10 px-2 py-1 rounded-full font-medium backdrop-blur-sm border border-white/10">
-                            Due: {vaccine.nextDueDate}
-                          </span>
+                          <button
+                             onClick={(e) => initiateConfirmDose(vaccine, e)}
+                             className="text-xs bg-emerald-500/20 hover:bg-emerald-500 hover:text-white text-emerald-300 border border-emerald-500/50 px-2 py-1 rounded-full font-medium backdrop-blur-sm transition-all flex items-center gap-1 group/btn"
+                             title="Confirm I took this dose"
+                           >
+                            <CheckIcon className="w-3.5 h-3.5" />
+                            <span>Due: {vaccine.nextDueDate}</span>
+                          </button>
                         </div>
                         <p className="text-slate-400 text-sm mt-1">
                             {vaccine.dateTaken ? `Last taken: ${vaccine.dateTaken}` : 'Scheduled (Not taken yet)'}
@@ -459,7 +514,14 @@ function App() {
                             )}
                             
                             {vaccine.nextDueDate && (
-                                <span className="text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-medium whitespace-nowrap">Next: {vaccine.nextDueDate}</span>
+                                <button
+                                   onClick={(e) => initiateConfirmDose(vaccine, e)}
+                                   className="text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-100 px-2 py-0.5 rounded font-medium whitespace-nowrap flex items-center gap-1 transition-colors"
+                                   title="Confirm I took this dose"
+                                >
+                                   <span>Next: {vaccine.nextDueDate}</span>
+                                   <CheckIcon className="w-3.5 h-3.5" />
+                                </button>
                             )}
                             
                             {/* Loading State for AI */}
@@ -635,12 +697,26 @@ function App() {
         prefilledName={prefilledName}
       />
 
+      {/* Delete Confirmation Modal */}
       <ConfirmModal 
         isOpen={!!vaccineToDelete}
         onClose={() => setVaccineToDelete(null)}
         onConfirm={confirmDelete}
         title="Delete Record?"
         message={`Are you sure you want to remove ${vaccineToDelete?.name}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        isDestructive={true}
+      />
+
+      {/* Confirm Dose Modal */}
+      <ConfirmModal 
+        isOpen={!!vaccineToConfirmDose}
+        onClose={() => setVaccineToConfirmDose(null)}
+        onConfirm={executeConfirmDose}
+        title="Confirm Vaccination"
+        message={`Did you take the ${vaccineToConfirmDose?.name} vaccine on ${vaccineToConfirmDose?.nextDueDate}? This will move the date to your history and schedule the next one.`}
+        confirmLabel="Yes, Confirm"
+        isDestructive={false}
       />
     </div>
   );

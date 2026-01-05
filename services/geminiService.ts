@@ -3,14 +3,14 @@ import { httpsCallable } from "firebase/functions";
 import { AiSuggestion, Suggestion, Vaccine } from "../types";
 
 export const GeminiService = {
-  analyzeVaccine: async (vaccineName: string, dateTaken?: string): Promise<AiSuggestion> => {
+  analyzeVaccine: async (vaccineName: string, dateTaken?: string, history?: string[]): Promise<AiSuggestion> => {
     try {
-      const analyzeVaccineFn = httpsCallable<{ vaccineName: string, dateTaken?: string }, AiSuggestion>(
+      const analyzeVaccineFn = httpsCallable<{ vaccineName: string, dateTaken?: string, history?: string[] }, AiSuggestion>(
         functions, 
         'analyzeVaccine'
       );
       
-      const result = await analyzeVaccineFn({ vaccineName, dateTaken });
+      const result = await analyzeVaccineFn({ vaccineName, dateTaken, history });
       return result.data;
     } catch (error) {
       console.error("Cloud Function analysis failed:", error);

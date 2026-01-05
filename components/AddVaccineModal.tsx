@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Vaccine, Suggestion } from '../types';
-import { PencilIcon } from './Icons';
+import { TrashIcon, CheckIcon } from './Icons';
 
 interface AddVaccineModalProps {
   isOpen: boolean;
@@ -36,6 +36,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
   
   const currentYear = new Date().getFullYear();
 
@@ -56,6 +57,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
         // Edit Mode
         setName(vaccineToEdit.name);
         setNotes(vaccineToEdit.notes || '');
+        setHistory(vaccineToEdit.history || []);
         
         // Parse "YYYY-MM-DD" or "YYYY-MM" or "YYYY" for Date Taken
         if (vaccineToEdit.dateTaken) {
@@ -145,7 +147,6 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
     e.preventDefault();
 
     // Construct fuzzy date string for Date Taken
-    // Only construct if Year is selected
     let dateStr: string | undefined = undefined;
     if (year) {
       dateStr = `${year}`;
@@ -173,6 +174,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
       id: vaccineToEdit ? vaccineToEdit.id : Date.now().toString(),
       name,
       createdAt: vaccineToEdit ? vaccineToEdit.createdAt : Date.now(),
+      history: history
     };
 
     if (dateStr) {
@@ -185,11 +187,52 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
     
     if (nextDueDateStr) {
       vaccine.nextDueDate = nextDueDateStr;
+    } else {
+        // If next due date is explicitly cleared, we should remove the property
+        // But the type says optional, so omitting it is fine.
+        // We also want to reset the AI analysis status if the user manually changes dates substantially,
+        // but that's handled in App.tsx typically.
+        // If user manually CLEARS next due date, we might want to re-trigger analysis.
+        // For now, we just save what we have.
+        // If confirming dose, we want to clear analysisStatus.
     }
 
     onSave(vaccine);
     resetForm();
     onClose();
+  };
+
+  const removeFromHistory = (dateToRemove: string) => {
+    setHistory(prev => prev.filter(d => d !== dateToRemove));
+  };
+
+  const handleInFormConfirmDose = () => {
+    // 1. Check if we have valid Next Date data
+    if (!nextYear) return;
+    
+    // 2. Archive current date if exists
+    if (year) {
+        let currentDateStr = `${year}`;
+        if (month) {
+            currentDateStr += `-${month}`;
+            if (day) {
+            currentDateStr += `-${day.padStart(2, '0')}`;
+            }
+        }
+        setHistory(prev => [...prev, currentDateStr]);
+    }
+
+    // 3. Move Next -> Current
+    setYear(nextYear);
+    setMonth(nextMonth);
+    setDay(nextDay);
+
+    // 4. Clear Next
+    setNextYear('');
+    setNextMonth('');
+    setNextDay('');
+
+    // Note: The actual save happens when they click "Update Record"
   };
 
   const resetForm = () => {
@@ -199,6 +242,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
     setMonth('');
     setDay('');
     setNotes('');
+    setHistory([]);
     setNextYear('');
     setNextMonth('');
     setNextDay('');
@@ -212,7 +256,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
           <h2 className="text-xl font-semibold text-slate-800">
             {vaccineToEdit ? 'Edit Record' : 'Add New Record'}
@@ -220,7 +264,7 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto">
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -265,8 +309,10 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
           </div>
           
           <div className="grid grid-cols-1 gap-5">
-             <div className="">
-                <label className="block text-sm font-medium text-slate-700 mb-1">Date Taken (Optional)</label>
+             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-bold text-slate-700">Latest Dose Taken</label>
+                </div>
                 <div className="flex gap-2">
                    <select 
                       className="flex-1 px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white text-slate-900"
@@ -308,9 +354,31 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
                       {currentDaysList.map(d => <option key={d} value={d}>{d}</option>)}
                    </select>
                 </div>
+
+                {/* History Section */}
+                {history.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-200/60">
+                    <label className="block text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wide">Previous Doses History</label>
+                    <div className="flex flex-wrap gap-2">
+                      {history.sort().reverse().map((date, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-white border border-slate-200 px-2 py-1 rounded text-xs text-slate-600 shadow-sm">
+                          <span>{date}</span>
+                          <button 
+                            type="button" 
+                            onClick={() => removeFromHistory(date)}
+                            className="text-slate-400 hover:text-red-500 p-0.5"
+                            title="Remove date"
+                          >
+                             <TrashIcon className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
              </div>
 
-             <div className="">
+             <div className="relative">
                 <label className="block text-sm font-medium text-slate-700 mb-1">Next Due Date (Optional)</label>
                 <div className="flex gap-2">
                    <select 
@@ -353,6 +421,19 @@ const AddVaccineModal: React.FC<AddVaccineModalProps> = ({
                       {nextDaysList.map(d => <option key={d} value={d}>{d}</option>)}
                    </select>
                 </div>
+                
+                {/* IN-FORM CONFIRM BUTTON */}
+                {nextYear && (
+                    <button 
+                        type="button"
+                        onClick={handleInFormConfirmDose}
+                        className="absolute top-0 right-0 text-xs flex items-center gap-1 text-emerald-600 font-semibold hover:bg-emerald-50 px-2 py-0.5 rounded transition"
+                        title="Moves Next Due Date to Current Dose, and Current Dose to History"
+                    >
+                        <CheckIcon className="w-3 h-3" />
+                        Mark Next Dose as Taken
+                    </button>
+                )}
              </div>
           </div>
 
