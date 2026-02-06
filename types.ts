@@ -39,4 +39,5 @@ export interface DietEntry {
   timestamp: number; // Unix timestamp
   notes?: string;
   intensity?: number; // 1-5, for symptoms
+  afterFoodDelay?: string; // e.g., "15m", "1h"
 }

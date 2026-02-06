@@ -13,6 +13,8 @@ interface AddDietEntryModalProps {
   history: DietEntry[];
 }
 
+const ONSET_DELAYS = ['Immediately', '15m', '1h', '2h', '4h', '8h'];
+
 const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -26,12 +28,12 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
   const [timestamp, setTimestamp] = useState(new Date());
   const [notes, setNotes] = useState('');
   const [intensity, setIntensity] = useState(3);
+  const [afterFoodDelay, setAfterFoodDelay] = useState<string | undefined>(undefined);
   
   const [foodSuggestions, setFoodSuggestions] = useState<string[]>([]);
   const [symptomSuggestions, setSymptomSuggestions] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   
-  // Track if we've already fetched for this "session" (modal open)
   const hasFetchedRef = useRef(false);
 
   useEffect(() => {
@@ -41,10 +43,8 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
       setTimestamp(new Date());
       setNotes('');
       setIntensity(3);
+      setAfterFoodDelay(undefined);
       
-      // Only clear/refetch if the history has changed or if it's a fresh open
-      // but the user wants it to only suggest when we start logging.
-      // We'll fetch once per open.
       if (!hasFetchedRef.current) {
         const fetchSuggestions = async () => {
           setIsLoadingSuggestions(true);
@@ -62,10 +62,7 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
         fetchSuggestions();
       }
     } else {
-      // Reset fetch ref when modal closes so next open triggers a fresh look
       hasFetchedRef.current = false;
-      setFoodSuggestions([]);
-      setSymptomSuggestions([]);
     }
   }, [isOpen, initialType, prefilledName, history]);
 
@@ -78,22 +75,24 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
       name: name.trim(),
       timestamp: timestamp.getTime(),
       notes: notes.trim(),
-      intensity: type === 'symptom' ? intensity : undefined
+      intensity: type === 'symptom' ? intensity : undefined,
+      afterFoodDelay: type === 'symptom' ? afterFoodDelay : undefined
     });
     onClose();
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    if (val) setTimestamp(new Date(val));
+    if (val) {
+      setTimestamp(new Date(val));
+    }
   };
 
   const currentSuggestions = type === 'food' ? foodSuggestions : symptomSuggestions;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-200">
-        {/* Header */}
+      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
           <h2 className="text-xl font-bold text-slate-800">
             Log {type === 'food' ? 'Food' : 'Symptom'}
@@ -103,7 +102,7 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 bg-white">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 bg-white max-h-[80vh] overflow-y-auto custom-scrollbar">
           {/* Type Toggle */}
           <div className="flex p-1 bg-slate-100 rounded-xl">
             <button
@@ -137,7 +136,7 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
               onChange={(e) => setName(e.target.value)}
             />
             
-            {/* AI Suggestions Row - Integrated inside the Modal */}
+            {/* AI Suggestions Row */}
             <div className="mt-3 flex flex-wrap gap-2 items-center min-h-[40px]">
                {isLoadingSuggestions ? (
                  <div className="flex items-center gap-2 text-slate-500 text-xs font-medium px-1">
@@ -162,7 +161,44 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
             </div>
           </div>
 
-          {/* Intensity Slider for Symptoms */}
+          {/* Onset Delay - SYMPTOM ONLY */}
+          {type === 'symptom' && (
+            <div className="animate-fade-in py-2 border-t border-slate-50 mt-2">
+              <label className="block text-sm font-bold text-slate-700 mb-2">How long after eating?</label>
+              <div className="grid grid-cols-3 gap-2">
+                {ONSET_DELAYS.map((delay) => (
+                  <button
+                    key={delay}
+                    type="button"
+                    onClick={() => setAfterFoodDelay(delay)}
+                    className={`px-2 py-2 rounded-xl text-xs font-bold border-2 transition-all ${
+                      afterFoodDelay === delay 
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100' 
+                        : 'bg-white border-slate-100 text-slate-500 hover:border-slate-300'
+                    }`}
+                  >
+                    {delay}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Absolute Time Picker */}
+          <div className="animate-fade-in border-t border-slate-50 pt-4">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
+              Time of Event
+            </label>
+            <input
+              type="datetime-local"
+              required
+              className="w-full px-4 py-2.5 rounded-xl border-2 border-slate-100 bg-slate-50 text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-0 outline-none transition font-medium text-sm"
+              value={new Date(timestamp.getTime() - timestamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
+              onChange={handleDateChange}
+            />
+          </div>
+
+          {/* Intensity Slider - SYMPTOM ONLY */}
           {type === 'symptom' && (
             <div className="animate-fade-in">
               <label className="block text-sm font-bold text-slate-700 mb-2">Intensity (1-5)</label>
@@ -172,7 +208,7 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
                     key={num}
                     type="button"
                     onClick={() => setIntensity(num)}
-                    className={`w-11 h-11 rounded-full font-bold transition-all border-2 ${intensity === num ? 'bg-blue-600 border-blue-600 text-white scale-110 shadow-lg' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
+                    className={`w-11 h-11 rounded-full font-bold transition-all border-2 ${intensity === num ? 'bg-amber-500 border-amber-500 text-white scale-110 shadow-lg' : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'}`}
                   >
                     {num}
                   </button>
@@ -181,28 +217,15 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
             </div>
           )}
 
-          {/* Date & Notes Fields */}
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Date & Time</label>
-              <input
-                type="datetime-local"
-                required
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-white text-slate-900 focus:border-blue-500 focus:ring-0 outline-none transition shadow-sm font-medium"
-                value={new Date(timestamp.getTime() - timestamp.getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
-                onChange={handleDateChange}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Notes (Optional)</label>
-              <textarea
-                className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-0 outline-none h-24 resize-none transition shadow-sm font-medium"
-                placeholder="Any additional details..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-              ></textarea>
-            </div>
+          {/* Notes Field */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">Notes (Optional)</label>
+            <textarea
+              className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-0 outline-none h-20 resize-none transition shadow-sm font-medium"
+              placeholder="Any additional details..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            ></textarea>
           </div>
 
           <button

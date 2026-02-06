@@ -14,12 +14,13 @@ function App() {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
   
-  // Initialize tab from localStorage or default to 'vaccines'
+  // Initialize tab from localStorage with a strict fallback
   const [activeTab, setActiveTabState] = useState<AppTab>(() => {
     const saved = localStorage.getItem('activeTab');
     return (saved === 'diet' || saved === 'vaccines') ? (saved as AppTab) : 'vaccines';
   });
 
+  // Explicit setter that handles persistence
   const setActiveTab = (tab: AppTab) => {
     setActiveTabState(tab);
     localStorage.setItem('activeTab', tab);
