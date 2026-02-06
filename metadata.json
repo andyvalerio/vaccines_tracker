@@ -1,5 +1,5 @@
 {
-  "name": "Vaccines Tracker",
-  "description": "Personal and family immunization tracker. secure, private, and powered by Gemini.",
+  "name": "Health Tracker",
+  "description": "Personal and family health tracker: secure, private, and powered by Gemini.",
   "requestFramePermissions": []
 }

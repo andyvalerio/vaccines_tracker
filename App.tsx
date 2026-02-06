@@ -1,77 +1,27 @@
+
 import React, { useState, useEffect } from 'react';
 import AuthScreen from './components/AuthScreen';
 import { StorageService } from './services/storageService';
 import { AuthService } from './services/authService';
-import { ExportService } from './services/exportService';
-import { GeminiService } from './services/geminiService';
-import { Account, Vaccine, Suggestion } from './types';
-import { PlusIcon, TrashIcon, CalendarIcon, DownloadIcon, PencilIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon, WarningIcon, CheckIcon, XMarkIcon, ShieldCheckIcon } from './components/Icons';
-import AddVaccineModal from './components/AddVaccineModal';
-import ConfirmModal from './components/ConfirmModal';
+import { Account } from './types';
+import VaccineTracker from './components/vaccines/VaccineTracker';
+import DietTracker from './components/diet/DietTracker';
+
+type AppTab = 'vaccines' | 'diet';
 
 function App() {
   const [account, setAccount] = useState<Account | null>(null);
-  const [vaccines, setVaccines] = useState<Vaccine[]>([]);
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingVaccine, setEditingVaccine] = useState<Vaccine | null>(null);
-  const [prefilledName, setPrefilledName] = useState<string>('');
-  
-  // Modal states for delete and confirm dose
-  const [vaccineToDelete, setVaccineToDelete] = useState<Vaccine | null>(null);
-  const [vaccineToConfirmDose, setVaccineToConfirmDose] = useState<Vaccine | null>(null);
+  const [activeTab, setActiveTab] = useState<AppTab>('vaccines');
 
-  const [hasCheckedSuggestions, setHasCheckedSuggestions] = useState(false);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
-  const [activeSuggestionId, setActiveSuggestionId] = useState<string | null>(null);
-  
-  const [isSuggestionsExpanded, setIsSuggestionsExpanded] = useState(true);
-
-  // Load Session & Realtime Data via Firebase
   useEffect(() => {
-    let unsubscribeVaccines: (() => void) | undefined;
-    let unsubscribeSuggestions: (() => void) | undefined;
-
     const unsubscribeAuth = AuthService.subscribe(async (firebaseUser) => {
       if (firebaseUser) {
         try {
           setInitError(null);
           const syncedAccount = await StorageService.initializeAccount(firebaseUser);
           setAccount(syncedAccount);
-          
-          unsubscribeVaccines = StorageService.subscribeVaccines(syncedAccount.id, (loadedVaccines) => {
-            // Sort Logic:
-            // 1. Missing Date Taken (Highest priority)
-            // 2. Needs Analysis (Missing Next Due Date AND Not Analyzed Yet)
-            // 3. Date Taken (Newest first)
-            const sorted = loadedVaccines.sort((a, b) => {
-               const aMissing = !a.dateTaken;
-               const bMissing = !b.dateTaken;
-               
-               if (aMissing && !bMissing) return -1;
-               if (!aMissing && bMissing) return 1;
-
-               const aNeedsAnalysis = !a.nextDueDate && !a.analysisStatus;
-               const bNeedsAnalysis = !b.nextDueDate && !b.analysisStatus;
-
-               if (aNeedsAnalysis && !bNeedsAnalysis) return -1;
-               if (!aNeedsAnalysis && bNeedsAnalysis) return 1;
-
-               // Both have dates or both missing. Newest date first.
-               const dateA = a.dateTaken ? new Date(a.dateTaken).getTime() : 0;
-               const dateB = b.dateTaken ? new Date(b.dateTaken).getTime() : 0;
-               return dateB - dateA;
-            });
-            setVaccines(sorted);
-          });
-
-          unsubscribeSuggestions = StorageService.subscribeSuggestions(syncedAccount.id, (loadedSuggestions) => {
-            setSuggestions(loadedSuggestions);
-          });
-
         } catch (e: any) {
           console.error("Failed to init data", e);
           setInitError(e.message || "Unknown initialization error");
@@ -79,271 +29,18 @@ function App() {
         }
       } else {
         setAccount(null);
-        setVaccines([]);
-        setSuggestions([]);
         setInitError(null);
-        setHasCheckedSuggestions(false);
-        
-        if (unsubscribeVaccines) unsubscribeVaccines();
-        if (unsubscribeSuggestions) unsubscribeSuggestions();
       }
       setIsLoadingAuth(false);
     });
 
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeVaccines) unsubscribeVaccines();
-      if (unsubscribeSuggestions) unsubscribeSuggestions();
-    };
+    return () => unsubscribeAuth();
   }, []);
-
-  // AI Suggestion Logic for Missing Vaccines (Group Suggestions)
-  useEffect(() => {
-    const checkSuggestions = async () => {
-      if (!account || hasCheckedSuggestions || vaccines.length === 0 || loadingSuggestions) return;
-      
-      if (suggestions.length > 0) {
-        setHasCheckedSuggestions(true);
-        return;
-      }
-
-      setLoadingSuggestions(true);
-      try {
-        const dismissed = await StorageService.getDismissedNames(account.id);
-        const newSuggestions = await GeminiService.suggestMissingVaccines(vaccines, dismissed);
-        
-        if (newSuggestions.length > 0) {
-          await StorageService.setSuggestions(account.id, newSuggestions);
-        }
-      } catch (e) {
-        console.error("Error generating suggestions:", e);
-      } finally {
-        setLoadingSuggestions(false);
-        setHasCheckedSuggestions(true);
-      }
-    };
-
-    const timeout = setTimeout(() => {
-        checkSuggestions();
-    }, 2000);
-
-    return () => clearTimeout(timeout);
-  }, [account, vaccines, suggestions.length, hasCheckedSuggestions, loadingSuggestions]);
-
-  // AI Analysis Logic for Existing Vaccines (Next Due Date)
-  useEffect(() => {
-    if (!account) return;
-
-    // Find a vaccine that:
-    // 1. Doesn't have a next due date set by user.
-    // 2. Hasn't been analyzed yet (status undefined or null).
-    // 3. Hasn't been dismissed by user (status != 'dismissed').
-    const candidate = vaccines.find(v => 
-      !v.nextDueDate && 
-      !v.analysisStatus
-    );
-
-    if (candidate) {
-      const analyze = async () => {
-        try {
-          // 1. Set status to loading to prevent double calls
-          await StorageService.updateVaccine(account.id, {
-            ...candidate,
-            analysisStatus: 'loading'
-          });
-
-          // 2. Call backend
-          const result = await GeminiService.analyzeVaccine(candidate.name, candidate.dateTaken, candidate.history);
-
-          // 3. Update with result
-          await StorageService.updateVaccine(account.id, {
-            ...candidate,
-            analysisStatus: 'completed',
-            suggestedNextDueDate: result.nextDueDate,
-            suggestedNotes: result.notes,
-          });
-        } catch (err) {
-          console.error("Analysis failed", err);
-          // Set to failed or reset so it might try again later?
-          // Let's set to dismissed for now to stop infinite loops on error
-          await StorageService.updateVaccine(account.id, {
-            ...candidate,
-            analysisStatus: 'dismissed' 
-          });
-        }
-      };
-      
-      // Debounce slightly
-      const timer = setTimeout(analyze, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [vaccines, account]);
 
   const handleLogout = async () => {
     await AuthService.logout();
     setInitError(null);
     setAccount(null);
-  };
-
-  const handleSaveVaccine = async (vaccine: Vaccine) => {
-    if (!account) return;
-    try {
-      // If we are editing, update. If new, add.
-      // Note: The AddVaccineModal might have modified the vaccine object 
-      // (e.g. Confirm Dose inside modal) so we just save whatever comes back.
-      if (editingVaccine) {
-        // If the user modified the nextDueDate or dateTaken inside the modal substantially, 
-        // we might want to reset analysisStatus. The modal clears it if they "Confirm Dose".
-        // But for general edits, we leave it unless handled elsewhere.
-        // For simplicity, if nextDueDate is cleared by user, we might want to re-analyze.
-        // The modal logic handles the object construction.
-        const vaccineToSave = { ...vaccine };
-        
-        // If nextDueDate was cleared and there is no analysis pending, reset it so AI runs again
-        if (!vaccineToSave.nextDueDate && vaccineToSave.analysisStatus === 'completed') {
-             vaccineToSave.analysisStatus = undefined;
-        }
-
-        await StorageService.updateVaccine(account.id, vaccineToSave);
-      } else {
-        await StorageService.addVaccine(account.id, vaccine);
-        if (activeSuggestionId) {
-            await StorageService.removeSuggestion(account.id, activeSuggestionId);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to save vaccine", e);
-      alert("Failed to save record. Check your connection.");
-    }
-  };
-
-  const handleEdit = (vaccine: Vaccine) => {
-    setEditingVaccine(vaccine);
-    setPrefilledName('');
-    setActiveSuggestionId(null);
-    setIsModalOpen(true);
-  };
-
-  const handleAddFromSuggestion = (suggestion: Suggestion) => {
-    setEditingVaccine(null);
-    setPrefilledName(suggestion.name);
-    setActiveSuggestionId(suggestion.id);
-    setIsModalOpen(true);
-  };
-
-  const handleDismissSuggestion = async (suggestion: Suggestion) => {
-    if (!account) return;
-    try {
-      await StorageService.removeSuggestion(account.id, suggestion.id);
-      await StorageService.addToDismissed(account.id, suggestion.name);
-    } catch (e) {
-      console.error("Failed to dismiss suggestion", e);
-    }
-  };
-
-  const handleAcceptAnalysis = async (vaccine: Vaccine, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!account) return;
-
-    try {
-      // Append AI suggestion to notes
-      const updatedNote = vaccine.notes 
-        ? `${vaccine.notes}\n\nAI Note: ${vaccine.suggestedNotes || ''}`
-        : vaccine.suggestedNotes || '';
-
-      const updates: any = {
-        ...vaccine,
-        notes: updatedNote.trim(),
-        suggestedNextDueDate: null,
-        suggestedNotes: null,
-        analysisStatus: 'accepted'
-      };
-
-      // Only set nextDueDate if one was actually suggested
-      if (vaccine.suggestedNextDueDate) {
-         updates.nextDueDate = vaccine.suggestedNextDueDate;
-      }
-
-      await StorageService.updateVaccine(account.id, updates);
-    } catch (err) {
-      console.error("Failed to accept analysis", err);
-    }
-  };
-
-  const handleDismissAnalysis = async (vaccine: Vaccine, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!account) return;
-
-    try {
-      await StorageService.updateVaccine(account.id, {
-        ...vaccine,
-        suggestedNextDueDate: null,
-        suggestedNotes: null,
-        analysisStatus: 'dismissed'
-      });
-    } catch (err) {
-      console.error("Failed to dismiss analysis", err);
-    }
-  };
-
-  const initiateConfirmDose = (vaccine: Vaccine, e: React.MouseEvent) => {
-     e.stopPropagation();
-     setVaccineToConfirmDose(vaccine);
-  };
-
-  const executeConfirmDose = async () => {
-    if (!account || !vaccineToConfirmDose || !vaccineToConfirmDose.nextDueDate) return;
-
-    try {
-      const vaccine = vaccineToConfirmDose;
-      const newHistory = [...(vaccine.history || [])];
-      
-      // If there was a current 'dateTaken', move it to history
-      if (vaccine.dateTaken) {
-        newHistory.push(vaccine.dateTaken);
-      }
-
-      await StorageService.updateVaccine(account.id, {
-        ...vaccine,
-        dateTaken: vaccine.nextDueDate, // Promote Next Due to Current
-        history: newHistory, // Save old current to history
-        nextDueDate: undefined, // Clear next due date
-        analysisStatus: undefined, // Reset AI status to trigger re-analysis for NEW next date
-        suggestedNextDueDate: null,
-        suggestedNotes: null
-      });
-      
-      setVaccineToConfirmDose(null);
-    } catch(err) {
-      console.error("Failed to confirm dose", err);
-      alert("Failed to update record");
-    }
-  };
-
-  const handleModalClose = () => {
-    setIsModalOpen(false);
-    setEditingVaccine(null);
-    setPrefilledName('');
-    setActiveSuggestionId(null);
-  };
-
-  const initiateDelete = (vaccine: Vaccine) => {
-    setVaccineToDelete(vaccine);
-  };
-
-  const confirmDelete = async () => {
-    if (!account || !vaccineToDelete) return;
-    try {
-      await StorageService.deleteVaccine(account.id, vaccineToDelete.id);
-      setVaccineToDelete(null);
-    } catch (e) {
-      console.error("Failed to delete", e);
-      alert("Failed to delete record.");
-    }
-  };
-
-  const handleExportExcel = () => {
-    ExportService.exportToExcel(vaccines);
   };
 
   if (isLoadingAuth) {
@@ -358,19 +55,9 @@ function App() {
      return (
        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
          <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border border-red-100 text-center">
-           <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4 mx-auto">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-              </svg>
-           </div>
            <h2 className="text-xl font-bold text-slate-900 mb-2">Something went wrong</h2>
-           <p className="text-slate-500 mb-6">
-             We couldn't load your data. This usually happens if the database rules prevent access or if the connection configuration is missing.
-           </p>
-           <div className="bg-slate-100 p-3 rounded text-left mb-6 overflow-x-auto">
-             <code className="text-xs text-red-600 font-mono whitespace-pre-wrap">{initError}</code>
-           </div>
-           <button onClick={handleLogout} className="bg-slate-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-slate-800 transition">
+           <p className="text-slate-500 mb-6">{initError}</p>
+           <button onClick={handleLogout} className="bg-slate-900 text-white px-6 py-2 rounded-lg font-medium">
              Sign Out & Try Again
            </button>
          </div>
@@ -382,21 +69,6 @@ function App() {
     return <AuthScreen />;
   }
 
-  // Filter for dashboard "Upcoming" section - only show confirmed next dates, not suggestions
-  const upcomingVaccines = vaccines.filter(v => {
-    if (!v.nextDueDate) return false;
-    const dueDate = new Date(v.nextDueDate);
-    if (isNaN(dueDate.getTime())) return false;
-    
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const sixMonthsFromNow = new Date(today);
-    sixMonthsFromNow.setMonth(today.getMonth() + 6);
-
-    return dueDate >= today && dueDate <= sixMonthsFromNow;
-  }).sort((a, b) => new Date(a.nextDueDate!).getTime() - new Date(b.nextDueDate!).getTime());
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
       <header className="bg-white shadow-sm sticky top-0 z-20">
@@ -407,11 +79,25 @@ function App() {
                   <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                 </svg>
             </div>
-            <span className="font-bold text-lg tracking-tight">Vaccines Tracker</span>
+            <span className="font-bold text-lg tracking-tight hidden sm:inline-block">Life Tracker</span>
           </div>
           
+          <nav className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+            <button 
+              onClick={() => setActiveTab('vaccines')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'vaccines' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Vaccines
+            </button>
+            <button 
+              onClick={() => setActiveTab('diet')}
+              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'diet' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Diet
+            </button>
+          </nav>
+
           <div className="flex items-center gap-4">
-             <span className="text-sm text-slate-500 hidden sm:inline-block">Hi, {account.name.split(' ')[0]}</span>
              <button onClick={handleLogout} className="text-sm text-slate-400 hover:text-slate-600 font-medium">
               Sign Out
             </button>
@@ -420,304 +106,12 @@ function App() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-6">
-        
-        <div className="animate-fade-in">
-             <div className="flex justify-between items-end mb-6">
-                <div>
-                   <h1 className="text-2xl font-bold text-slate-900">My Dashboard</h1>
-                   <p className="text-slate-500">Managing immunizations</p>
-                </div>
-             </div>
-
-            {/* Upcoming Section */}
-            {upcomingVaccines.length > 0 && (
-              <div className="mb-8">
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4 px-1">Upcoming (Next 6 Months)</h2>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {upcomingVaccines.map(vaccine => (
-                    <div 
-                      key={vaccine.id} 
-                      onClick={() => handleEdit(vaccine)}
-                      className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group border border-slate-700 cursor-pointer hover:scale-[1.01] transition-transform"
-                    >
-                      <div className="relative z-10">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-bold text-lg">{vaccine.name}</h3>
-                          <button
-                             onClick={(e) => initiateConfirmDose(vaccine, e)}
-                             className="text-xs bg-emerald-500/20 hover:bg-emerald-500 hover:text-white text-emerald-300 border border-emerald-500/50 px-2 py-1 rounded-full font-medium backdrop-blur-sm transition-all flex items-center gap-1 group/btn"
-                             title="Confirm I took this dose"
-                           >
-                            <CheckIcon className="w-3.5 h-3.5" />
-                            <span>Due: {vaccine.nextDueDate}</span>
-                          </button>
-                        </div>
-                        <p className="text-slate-400 text-sm mt-1">
-                            {vaccine.dateTaken ? `Last taken: ${vaccine.dateTaken}` : 'Scheduled (Not taken yet)'}
-                        </p>
-                        {vaccine.notes && (
-                            <p className="mt-3 text-sm text-white/90 bg-white/5 p-2 rounded-lg border border-white/5">
-                                {vaccine.notes}
-                            </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* History Section */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4 px-1">
-                <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">All Records</h2>
-                {vaccines.length > 0 && (
-                  <button 
-                    onClick={handleExportExcel}
-                    className="flex items-center gap-2 text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors"
-                  >
-                    <DownloadIcon className="w-4 h-4" />
-                    Export Excel
-                  </button>
-                )}
-              </div>
-              
-              {vaccines.length === 0 ? (
-                <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-50 text-slate-300 mb-4">
-                    <CalendarIcon className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-slate-900 font-medium text-lg">No records found</h3>
-                  <p className="text-slate-500 mt-1 max-w-xs mx-auto">Start tracking by adding your first vaccine record.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {vaccines.map(vaccine => (
-                    <div 
-                      key={vaccine.id} 
-                      onClick={() => handleEdit(vaccine)}
-                      className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col group hover:border-blue-200"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 mr-4">
-                            <h3 className="font-bold text-slate-800 text-lg">{vaccine.name}</h3>
-                            <div className="flex items-center gap-2 text-slate-500 text-sm mt-1 flex-wrap">
-                            {vaccine.dateTaken ? (
-                                <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-medium whitespace-nowrap">
-                                    Taken: {vaccine.dateTaken}
-                                </span>
-                            ) : (
-                                <span className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded text-amber-700 font-medium whitespace-nowrap border border-amber-200">
-                                    <WarningIcon className="w-3.5 h-3.5" />
-                                    Missing
-                                </span>
-                            )}
-                            
-                            {vaccine.nextDueDate && (
-                                <button
-                                   onClick={(e) => initiateConfirmDose(vaccine, e)}
-                                   className="text-blue-600 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-100 px-2 py-0.5 rounded font-medium whitespace-nowrap flex items-center gap-1 transition-colors"
-                                   title="Confirm I took this dose"
-                                >
-                                   <span>Next: {vaccine.nextDueDate}</span>
-                                   <CheckIcon className="w-3.5 h-3.5" />
-                                </button>
-                            )}
-                            
-                            {/* Loading State for AI */}
-                            {!vaccine.nextDueDate && vaccine.analysisStatus === 'loading' && (
-                                <span className="text-purple-600 bg-purple-50 px-2 py-0.5 rounded font-medium whitespace-nowrap animate-pulse flex items-center gap-1">
-                                    <SparklesIcon className="w-3 h-3" />
-                                    Analyzing...
-                                </span>
-                            )}
-                            </div>
-                            {vaccine.notes && (
-                            <p className="text-slate-500 text-sm mt-3 leading-relaxed max-w-lg">{vaccine.notes}</p>
-                            )}
-                        </div>
-                        <div className="flex gap-1">
-                            <button 
-                            onClick={(e) => { e.stopPropagation(); handleEdit(vaccine); }}
-                            className="text-slate-300 hover:text-blue-600 p-2 rounded-full hover:bg-blue-50 transition-colors"
-                            title="Edit record"
-                            >
-                            <PencilIcon className="w-5 h-5" />
-                            </button>
-                            <button 
-                            onClick={(e) => { e.stopPropagation(); initiateDelete(vaccine); }}
-                            className="text-slate-300 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
-                            title="Delete record"
-                            >
-                            <TrashIcon className="w-5 h-5" />
-                            </button>
-                        </div>
-                      </div>
-
-                      {/* AI Suggestion Box (Renewal Needed) */}
-                      {vaccine.suggestedNextDueDate && !vaccine.nextDueDate && (
-                        <div className="mt-4 bg-purple-50 border border-purple-100 rounded-lg p-3 relative overflow-hidden">
-                           <div className="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
-                           <div className="flex items-start gap-3">
-                              <SparklesIcon className="w-5 h-5 text-purple-600 mt-0.5 flex-shrink-0" />
-                              <div className="flex-1">
-                                 <p className="text-sm font-semibold text-purple-900 mb-1">
-                                    Suggested Next Due Date: {vaccine.suggestedNextDueDate}
-                                 </p>
-                                 {vaccine.suggestedNotes && (
-                                    <p className="text-xs text-purple-700 leading-relaxed mb-3">
-                                        {vaccine.suggestedNotes}
-                                    </p>
-                                 )}
-                                 <div className="flex gap-2">
-                                    <button 
-                                        onClick={(e) => handleAcceptAnalysis(vaccine, e)}
-                                        className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1.5 rounded-md transition-colors shadow-sm"
-                                    >
-                                        <CheckIcon className="w-3.5 h-3.5" />
-                                        Accept & Set Date
-                                    </button>
-                                    <button 
-                                        onClick={(e) => handleDismissAnalysis(vaccine, e)}
-                                        className="flex items-center gap-1.5 bg-white border border-purple-200 hover:bg-purple-100 text-purple-700 text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
-                                    >
-                                        <XMarkIcon className="w-3.5 h-3.5" />
-                                        Dismiss
-                                    </button>
-                                 </div>
-                              </div>
-                           </div>
-                        </div>
-                      )}
-
-                      {/* AI "All Good" Box (No Renewal Needed) - STATIC GREEN NOTE */}
-                      {!vaccine.suggestedNextDueDate && vaccine.analysisStatus === 'completed' && vaccine.suggestedNotes && (
-                        <div className="mt-4 bg-emerald-50 border border-emerald-100 rounded-lg p-3 relative overflow-hidden">
-                           <div className="absolute top-0 left-0 w-1 h-full bg-emerald-400"></div>
-                           <div className="flex items-start gap-3">
-                              <ShieldCheckIcon className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
-                              <div className="flex-1">
-                                 <p className="text-sm font-semibold text-emerald-900 mb-1">
-                                    Status: Good
-                                 </p>
-                                 <p className="text-xs text-emerald-700 leading-relaxed">
-                                    {vaccine.suggestedNotes}
-                                 </p>
-                              </div>
-                           </div>
-                        </div>
-                      )}
-
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Might Be Missing Section (AI Suggestions for New Vaccines) */}
-            {suggestions.length > 0 && (
-              <div className="mb-8 animate-fade-in">
-                <div 
-                  onClick={() => setIsSuggestionsExpanded(!isSuggestionsExpanded)}
-                  className="flex items-center justify-between mb-4 px-1 cursor-pointer group select-none"
-                >
-                  <div className="flex items-center gap-2">
-                    <SparklesIcon className="w-4 h-4 text-amber-500" />
-                    <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider group-hover:text-slate-600 transition-colors">
-                      Might Be Missing
-                      {!isSuggestionsExpanded && <span className="ml-2 text-xs normal-case font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">{suggestions.length} suggestions</span>}
-                    </h2>
-                  </div>
-                  <button className="text-slate-400 hover:text-slate-600">
-                    {isSuggestionsExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-                  </button>
-                </div>
-                
-                {isSuggestionsExpanded && (
-                  <div className="grid gap-3 sm:grid-cols-2 animate-fade-in">
-                    {suggestions.map(suggestion => (
-                       <div 
-                        key={suggestion.id}
-                        className="bg-amber-50 border border-amber-100 rounded-xl p-4 flex flex-col justify-between"
-                       >
-                          <div>
-                            <h3 className="font-bold text-amber-900 text-lg">{suggestion.name}</h3>
-                            <p className="text-amber-700/80 text-sm mt-1 mb-4">{suggestion.reason}</p>
-                          </div>
-                          <div className="flex gap-2">
-                             <button 
-                               onClick={() => handleAddFromSuggestion(suggestion)}
-                               className="flex-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-medium text-sm py-2 px-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-                             >
-                               <PlusIcon className="w-4 h-4" />
-                               Add Record
-                             </button>
-                             <button 
-                               onClick={() => handleDismissSuggestion(suggestion)}
-                               className="bg-white hover:bg-amber-100 text-amber-600 border border-amber-200 p-2 rounded-lg transition-colors"
-                               title="Don't show this again"
-                             >
-                               <span className="sr-only">Dismiss</span>
-                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                             </button>
-                          </div>
-                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            
-          </div>
+        {activeTab === 'vaccines' ? (
+          <VaccineTracker account={account} />
+        ) : (
+          <DietTracker />
+        )}
       </main>
-
-      {/* Floating Action Button */}
-      <div className="fixed bottom-6 right-6 z-30">
-        <button
-          onClick={() => { setEditingVaccine(null); setPrefilledName(''); setActiveSuggestionId(null); setIsModalOpen(true); }}
-          className="bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg shadow-blue-300 hover:shadow-xl hover:scale-105 transition-all duration-200 group"
-          aria-label="Add Vaccine"
-        >
-          <PlusIcon className="w-7 h-7" />
-          <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity">
-            Add Record
-          </span>
-        </button>
-      </div>
-
-      <AddVaccineModal 
-        isOpen={isModalOpen} 
-        onClose={handleModalClose} 
-        onSave={handleSaveVaccine}
-        existingVaccines={vaccines}
-        userSuggestions={suggestions}
-        vaccineToEdit={editingVaccine}
-        prefilledName={prefilledName}
-      />
-
-      {/* Delete Confirmation Modal */}
-      <ConfirmModal 
-        isOpen={!!vaccineToDelete}
-        onClose={() => setVaccineToDelete(null)}
-        onConfirm={confirmDelete}
-        title="Delete Record?"
-        message={`Are you sure you want to remove ${vaccineToDelete?.name}? This action cannot be undone.`}
-        confirmLabel="Delete"
-        isDestructive={true}
-      />
-
-      {/* Confirm Dose Modal */}
-      <ConfirmModal 
-        isOpen={!!vaccineToConfirmDose}
-        onClose={() => setVaccineToConfirmDose(null)}
-        onConfirm={executeConfirmDose}
-        title="Confirm Vaccination"
-        message={`Did you take the ${vaccineToConfirmDose?.name} vaccine on ${vaccineToConfirmDose?.nextDueDate}? This will move the date to your history and schedule the next one.`}
-        confirmLabel="Yes, Confirm"
-        isDestructive={false}
-      />
     </div>
   );
 }
