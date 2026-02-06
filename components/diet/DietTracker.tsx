@@ -57,6 +57,24 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
     return new Date(ts).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   };
 
+  const getIcon = (type: DietEntryType) => {
+    switch (type) {
+      case 'food': return '🍽️';
+      case 'medicine': return '💊';
+      case 'symptom': return '⚠️';
+      default: return '📝';
+    }
+  };
+
+  const getTypeColor = (type: DietEntryType) => {
+    switch (type) {
+      case 'food': return 'bg-blue-50 text-blue-600';
+      case 'medicine': return 'bg-indigo-50 text-indigo-600';
+      case 'symptom': return 'bg-amber-50 text-amber-600';
+      default: return 'bg-slate-50 text-slate-600';
+    }
+  };
+
   const groupedEntries = useMemo(() => {
     const groups: { [key: string]: DietEntry[] } = {};
     entries.forEach(entry => {
@@ -72,7 +90,7 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
       <div className="mb-8 flex justify-between items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Diet Tracker</h1>
-          <p className="text-slate-500">Log your meals and track symptoms</p>
+          <p className="text-slate-500">Log meals, meds, and track symptoms</p>
         </div>
         <div className="flex gap-2">
            <button 
@@ -87,18 +105,24 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
 
       <DietAnalytics entries={entries} />
 
-      <div className="flex gap-4 mb-10 hidden sm:flex">
+      <div className="flex gap-3 mb-10 hidden sm:flex">
         <button 
           onClick={() => openModal('food')}
           className="flex-1 bg-white border-2 border-slate-200 hover:border-blue-600 hover:text-blue-600 text-slate-700 py-4 rounded-xl font-bold transition transform active:scale-95 shadow-sm flex items-center justify-center gap-2"
         >
-          <PlusIcon className="w-5 h-5" /> Log Food
+          <span className="text-xl">🍽️</span> Log Food
+        </button>
+        <button 
+          onClick={() => openModal('medicine')}
+          className="flex-1 bg-white border-2 border-slate-200 hover:border-indigo-600 hover:text-indigo-600 text-slate-700 py-4 rounded-xl font-bold transition transform active:scale-95 shadow-sm flex items-center justify-center gap-2"
+        >
+          <span className="text-xl">💊</span> Log Medicine
         </button>
         <button 
           onClick={() => openModal('symptom')}
           className="flex-1 bg-white border-2 border-slate-200 hover:border-amber-600 text-slate-700 hover:text-amber-600 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 transform active:scale-95 shadow-sm"
         >
-          <PlusIcon className="w-5 h-5" /> Log Symptom
+          <span className="text-xl">⚠️</span> Log Symptom
         </button>
       </div>
 
@@ -107,7 +131,7 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
           <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-slate-200">
             <CalendarIcon className="w-12 h-12 mx-auto text-slate-300 mb-4" />
             <h3 className="text-slate-900 font-bold text-xl">No logs yet</h3>
-            <p className="text-slate-400 text-sm mt-1">Your meal and symptom timeline will appear here.</p>
+            <p className="text-slate-400 text-sm mt-1">Your timeline of events will appear here.</p>
           </div>
         ) : (
           (Object.entries(groupedEntries) as [string, DietEntry[]][]).map(([date, items]) => (
@@ -116,8 +140,8 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
               <div className="space-y-4">
                 {items.map(entry => (
                   <div key={entry.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-5 group hover:border-blue-100 transition-colors">
-                    <div className={`mt-0.5 w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-xl shadow-inner ${entry.type === 'food' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>
-                      {entry.type === 'food' ? '🍽️' : '⚠️'}
+                    <div className={`mt-0.5 w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-xl shadow-inner ${getTypeColor(entry.type)}`}>
+                      {getIcon(entry.type)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">

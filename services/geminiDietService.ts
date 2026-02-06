@@ -5,9 +5,9 @@ import { DietEntry } from "../types";
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const GeminiDietService = {
-  getDietSuggestions: async (history: DietEntry[]): Promise<{ food: string[], symptoms: string[] }> => {
+  getDietSuggestions: async (history: DietEntry[]): Promise<{ food: string[], symptoms: string[], medicines: string[] }> => {
     const hour = new Date().getHours();
-    const recentLogs = history.slice(0, 15).map(h => ({
+    const recentLogs = history.slice(0, 20).map(h => ({
       type: h.type,
       name: h.name,
       time: new Date(h.timestamp).getHours()
@@ -21,10 +21,11 @@ export const GeminiDietService = {
         Based on the current time and user history, suggest:
         1. 4-5 Food items they are likely to eat now.
         2. 3-4 GI symptoms they might be feeling based on what they recently ate.
+        3. 3-4 Medicines or supplements they might take (e.g. Vitamins in morning, Antacids after heavy meals, Melatonin at night).
         
         Guidelines:
         - If the user often eats "Eggs" in the morning and it's morning, suggest "Eggs".
-        - If they ate something heavy or spicy recently, suggest relevant symptoms like "Bloating" or "Heartburn".
+        - If they ate something heavy or spicy recently, suggest relevant symptoms like "Bloating" or medicines like "Antacid".
         - Keep names short (1-2 words).
         `,
         config: {
@@ -39,22 +40,27 @@ export const GeminiDietService = {
               symptoms: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING }
+              },
+              medicines: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
               }
             },
-            required: ["food", "symptoms"]
+            required: ["food", "symptoms", "medicines"]
           }
         }
       });
 
       const text = response.text;
-      if (!text) return { food: [], symptoms: [] };
+      if (!text) return { food: [], symptoms: [], medicines: [] };
       return JSON.parse(text);
     } catch (error) {
       console.error("Gemini Diet Suggestion failed:", error);
       // Fallback defaults
       return {
         food: ["Oatmeal", "Salad", "Coffee", "Apple"],
-        symptoms: ["Bloating", "Nausea", "Cramps"]
+        symptoms: ["Bloating", "Nausea", "Cramps"],
+        medicines: ["Multivitamin", "Probiotic", "Ibuprofen"]
       };
     }
   }

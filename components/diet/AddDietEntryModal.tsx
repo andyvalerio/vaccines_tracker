@@ -32,6 +32,7 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
   
   const [foodSuggestions, setFoodSuggestions] = useState<string[]>([]);
   const [symptomSuggestions, setSymptomSuggestions] = useState<string[]>([]);
+  const [medicineSuggestions, setMedicineSuggestions] = useState<string[]>([]);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   
   const hasFetchedRef = useRef(false);
@@ -50,8 +51,9 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
           setIsLoadingSuggestions(true);
           try {
             const result = await GeminiDietService.getDietSuggestions(history);
-            setFoodSuggestions(result.food);
-            setSymptomSuggestions(result.symptoms);
+            setFoodSuggestions(result.food || []);
+            setSymptomSuggestions(result.symptoms || []);
+            setMedicineSuggestions(result.medicines || []);
             hasFetchedRef.current = true;
           } catch (e) {
             console.error("Failed to load suggestions", e);
@@ -88,14 +90,20 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
     }
   };
 
-  const currentSuggestions = type === 'food' ? foodSuggestions : symptomSuggestions;
+  const getCurrentSuggestions = () => {
+    if (type === 'food') return foodSuggestions;
+    if (type === 'medicine') return medicineSuggestions;
+    return symptomSuggestions;
+  };
+
+  const currentSuggestions = getCurrentSuggestions();
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-200">
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
           <h2 className="text-xl font-bold text-slate-800">
-            Log {type === 'food' ? 'Food' : 'Symptom'}
+            Log {type.charAt(0).toUpperCase() + type.slice(1)}
           </h2>
           <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition text-slate-500">
             <XMarkIcon className="w-6 h-6" />
@@ -104,18 +112,25 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5 bg-white max-h-[80vh] overflow-y-auto custom-scrollbar">
           {/* Type Toggle */}
-          <div className="flex p-1 bg-slate-100 rounded-xl">
+          <div className="flex p-1 bg-slate-100 rounded-xl gap-1">
             <button
               type="button"
               onClick={() => setType('food')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${type === 'food' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${type === 'food' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Food
             </button>
             <button
               type="button"
+              onClick={() => setType('medicine')}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${type === 'medicine' ? 'bg-white text-indigo-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Medicine
+            </button>
+            <button
+              type="button"
               onClick={() => setType('symptom')}
-              className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all ${type === 'symptom' ? 'bg-white text-blue-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-bold transition-all ${type === 'symptom' ? 'bg-white text-amber-600 shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Symptom
             </button>
@@ -124,14 +139,14 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
           {/* Name Input */}
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">
-              {type === 'food' ? 'What did you eat?' : 'What do you feel?'}
+              {type === 'food' ? 'What did you eat?' : type === 'medicine' ? 'What did you take?' : 'What do you feel?'}
             </label>
             <input
               type="text"
               required
               autoFocus
               className="w-full px-4 py-3 rounded-xl border-2 border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-0 outline-none transition shadow-sm font-medium text-lg"
-              placeholder={type === 'food' ? "e.g. Scrambled Eggs" : "e.g. Bloating"}
+              placeholder={type === 'food' ? "e.g. Scrambled Eggs" : type === 'medicine' ? "e.g. Multivitamin" : "e.g. Bloating"}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -151,7 +166,11 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
                         key={idx}
                         type="button"
                         onClick={() => setName(s)}
-                        className="text-xs bg-slate-50 hover:bg-blue-600 border border-slate-200 hover:border-blue-600 text-slate-700 hover:text-white px-3 py-1.5 rounded-lg transition-all font-semibold"
+                        className={`text-xs bg-slate-50 hover:bg-opacity-100 border border-slate-200 px-3 py-1.5 rounded-lg transition-all font-semibold ${
+                            type === 'food' ? 'hover:bg-blue-600 hover:border-blue-600 hover:text-white' :
+                            type === 'medicine' ? 'hover:bg-indigo-600 hover:border-indigo-600 hover:text-white' :
+                            'hover:bg-amber-600 hover:border-amber-600 hover:text-white'
+                        }`}
                       >
                         {s}
                       </button>
@@ -230,7 +249,11 @@ const AddDietEntryModal: React.FC<AddDietEntryModalProps> = ({
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-4 rounded-xl shadow-xl transition-all active:scale-95 mt-2 text-lg"
+            className={`w-full font-bold py-4 px-4 rounded-xl shadow-xl transition-all active:scale-95 mt-2 text-lg text-white ${
+                type === 'food' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-100' :
+                type === 'medicine' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100' :
+                'bg-amber-600 hover:bg-amber-700 shadow-amber-100'
+            }`}
           >
             Save Entry
           </button>

@@ -30,7 +30,7 @@ export interface Suggestion {
   reason: string;
 }
 
-export type DietEntryType = 'food' | 'symptom';
+export type DietEntryType = 'food' | 'symptom' | 'medicine';
 
 export interface DietEntry {
   id: string;

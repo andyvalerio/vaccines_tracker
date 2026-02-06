@@ -34,15 +34,17 @@ const DietAnalytics: React.FC<DietAnalyticsProps> = ({ entries }) => {
     });
 
     return Object.entries(days).sort((a, b) => {
-        // Simple fallback for sorting keys if no entries present
-        const dateA = new Date(a[0]).getTime() || 0;
-        const dateB = new Date(b[0]).getTime() || 0;
-        // Since key is like "Mon, Jan 1", let's use the first item if available
         const timeA = a[1][0]?.timestamp || (new Date(a[0] + ", " + new Date().getFullYear()).getTime());
         const timeB = b[1][0]?.timestamp || (new Date(b[0] + ", " + new Date().getFullYear()).getTime());
         return timeB - timeA;
     });
   }, [entries, range]);
+
+  const getEntryIcon = (type: string) => {
+    if (type === 'food') return '🍽️';
+    if (type === 'medicine') return '💊';
+    return '⚠️';
+  };
 
   if (entries.length === 0) return null;
 
@@ -73,6 +75,7 @@ const DietAnalytics: React.FC<DietAnalyticsProps> = ({ entries }) => {
            {!isMinimized && (
             <div className="hidden md:flex gap-4 text-[10px] font-bold uppercase tracking-tighter text-slate-400">
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400"></span> Food</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-400"></span> Medicine</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400"></span> Symptom</span>
             </div>
            )}
@@ -114,8 +117,9 @@ const DietAnalytics: React.FC<DietAnalyticsProps> = ({ entries }) => {
                         ))}
                       </div>
 
-                      {/* Lane Divider */}
-                      <div className="absolute top-1/2 left-0 w-full h-[1px] bg-slate-200/30"></div>
+                      {/* Lane Dividers */}
+                      <div className="absolute top-1/3 left-0 w-full h-[1px] bg-slate-200/30"></div>
+                      <div className="absolute top-2/3 left-0 w-full h-[1px] bg-slate-200/30"></div>
 
                       {/* Data Points */}
                       {items.map(entry => {
@@ -123,19 +127,25 @@ const DietAnalytics: React.FC<DietAnalyticsProps> = ({ entries }) => {
                         const hours = dateObj.getHours() + (dateObj.getMinutes() / 60);
                         const position = (hours / 24) * 100;
                         
+                        let topPos = 'top-1';
+                        let bgColor = 'bg-blue-500';
+                        if (entry.type === 'medicine') {
+                            topPos = 'top-[0.8rem]';
+                            bgColor = 'bg-indigo-500';
+                        } else if (entry.type === 'symptom') {
+                            topPos = 'bottom-1';
+                            bgColor = 'bg-gradient-to-br from-amber-400 to-red-500';
+                        }
+                        
                         return (
                           <button
                             key={entry.id}
                             onMouseEnter={() => setHoveredEntry(entry)}
                             onMouseLeave={() => setHoveredEntry(null)}
-                            className={`absolute w-4 h-4 -ml-2 rounded-lg transition-all transform hover:scale-150 z-10 cursor-help flex items-center justify-center shadow-sm ${
-                              entry.type === 'food' 
-                                ? 'top-1 bg-blue-500 text-[10px] text-white' 
-                                : 'bottom-1 bg-gradient-to-br from-amber-400 to-red-500 text-white'
-                            }`}
+                            className={`absolute w-4 h-4 -ml-2 rounded-lg transition-all transform hover:scale-150 z-10 cursor-help flex items-center justify-center shadow-sm text-[10px] text-white ${bgColor} ${topPos}`}
                             style={{ left: `${position}%` }}
                           >
-                            {entry.type === 'food' ? '🍽️' : '⚠️'}
+                            {getEntryIcon(entry.type)}
                             
                             {entry.type === 'symptom' && (
                                 <div 
@@ -157,8 +167,12 @@ const DietAnalytics: React.FC<DietAnalyticsProps> = ({ entries }) => {
           <div className="mt-8 h-16 border-t border-slate-100 pt-4 flex items-center">
             {hoveredEntry ? (
               <div className="flex items-center gap-4 animate-fade-in w-full">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm ${hoveredEntry.type === 'food' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
-                  {hoveredEntry.type === 'food' ? '🍽️' : '⚠️'}
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm ${
+                    hoveredEntry.type === 'food' ? 'bg-blue-100 text-blue-600' : 
+                    hoveredEntry.type === 'medicine' ? 'bg-indigo-100 text-indigo-600' : 
+                    'bg-amber-100 text-amber-600'
+                }`}>
+                  {getEntryIcon(hoveredEntry.type)}
                 </div>
                 <div>
                   <h4 className="font-bold text-slate-800 text-sm leading-none flex items-center gap-2">
@@ -168,7 +182,7 @@ const DietAnalytics: React.FC<DietAnalyticsProps> = ({ entries }) => {
                     )}
                   </h4>
                   <p className="text-xs text-slate-400 mt-1 font-medium">
-                    Logged at {new Date(hoveredEntry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {hoveredEntry.type.charAt(0).toUpperCase() + hoveredEntry.type.slice(1)} logged at {new Date(hoveredEntry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
                 {hoveredEntry.notes && (
@@ -179,7 +193,7 @@ const DietAnalytics: React.FC<DietAnalyticsProps> = ({ entries }) => {
               </div>
             ) : (
               <div className="flex items-center justify-center w-full text-xs text-slate-300 font-medium italic">
-                Hover over a marker to see details and discover patterns.
+                Hover over a marker to see details and discover patterns across food, meds, and symptoms.
               </div>
             )}
           </div>
