@@ -2,9 +2,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { StorageService } from '../../services/storageService';
 import { Account, DietEntry, DietEntryType } from '../../types';
-import { PlusIcon, TrashIcon, CalendarIcon } from '../Icons';
+import { PlusIcon, CalendarIcon } from '../Icons';
 import AddDietEntryModal from './AddDietEntryModal';
 import ConfirmModal from '../vaccines/ConfirmModal';
+import DietAnalytics from './DietAnalytics';
 
 interface DietTrackerProps {
   account: Account;
@@ -68,21 +69,35 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
 
   return (
     <div className="animate-fade-in pb-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Diet Tracker</h1>
-        <p className="text-slate-500">Log your meals and track symptoms</p>
+      <div className="mb-8 flex justify-between items-end">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Diet Tracker</h1>
+          <p className="text-slate-500">Log your meals and track symptoms</p>
+        </div>
+        <div className="flex gap-2">
+           <button 
+            onClick={() => openModal('food')}
+            className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-2xl shadow-lg shadow-blue-100 transition active:scale-95"
+            title="Add Log Entry"
+          >
+            <PlusIcon className="w-6 h-6" />
+          </button>
+        </div>
       </div>
 
-      <div className="flex gap-4 mb-10">
+      {/* Analytics Visualization */}
+      <DietAnalytics entries={entries} />
+
+      <div className="flex gap-4 mb-10 hidden sm:flex">
         <button 
           onClick={() => openModal('food')}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-bold shadow-lg shadow-blue-100 flex items-center justify-center gap-2 transition transform active:scale-95"
+          className="flex-1 bg-white border-2 border-slate-200 hover:border-blue-600 hover:text-blue-600 text-slate-700 py-4 rounded-xl font-bold transition transform active:scale-95 shadow-sm flex items-center justify-center gap-2"
         >
           <PlusIcon className="w-5 h-5" /> Log Food
         </button>
         <button 
           onClick={() => openModal('symptom')}
-          className="flex-1 bg-white border-2 border-slate-200 hover:border-blue-600 text-slate-700 hover:text-blue-600 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 transform active:scale-95 shadow-sm"
+          className="flex-1 bg-white border-2 border-slate-200 hover:border-amber-600 text-slate-700 hover:text-amber-600 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 transform active:scale-95 shadow-sm"
         >
           <PlusIcon className="w-5 h-5" /> Log Symptom
         </button>
@@ -103,7 +118,7 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
               <div className="space-y-4">
                 {items.map(entry => (
                   <div key={entry.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-5 group hover:border-blue-100 transition-colors">
-                    <div className={`mt-0.5 w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-xl shadow-inner ${entry.type === 'food' ? 'bg-blue-50 text-blue-600' : 'bg-red-50 text-red-600'}`}>
+                    <div className={`mt-0.5 w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-xl shadow-inner ${entry.type === 'food' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>
                       {entry.type === 'food' ? '🍽️' : '⚠️'}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -112,7 +127,7 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
                           <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2 flex-wrap">
                             {entry.name}
                             {entry.intensity !== undefined && (
-                              <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded-full uppercase font-black tracking-wider">Level {entry.intensity}</span>
+                              <span className="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full uppercase font-black tracking-wider">Level {entry.intensity}</span>
                             )}
                           </h3>
                           <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-0.5">{formatTime(entry.timestamp)}</p>
@@ -121,7 +136,9 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
                           onClick={() => setEntryToDelete(entry)}
                           className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-2 bg-slate-50 rounded-lg"
                         >
-                          <TrashIcon className="w-4 h-4" />
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                          </svg>
                         </button>
                       </div>
                       {entry.notes && (
