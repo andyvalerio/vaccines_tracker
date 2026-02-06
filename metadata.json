@@ -1,5 +1,5 @@
 {
   "name": "Health Tracker",
-  "description": "Personal and family health tracker: secure, private, and powered by Gemini.",
+  "description": "Personal health tracker: secure, private, and powered by Gemini.",
   "requestFramePermissions": []
 }

@@ -1,3 +1,4 @@
+
 export interface Account {
   id: string;
   email: string;
@@ -6,15 +7,12 @@ export interface Account {
 
 export interface Vaccine {
   id: string;
-  // profileId removed - vaccines now belong directly to the account/user
   name: string;
-  dateTaken?: string; // Represents the LATEST dose taken
-  history?: string[]; // Array of previous dates taken (ISO strings)
+  dateTaken?: string;
+  history?: string[];
   nextDueDate?: string;
   notes?: string;
   createdAt: number;
-  
-  // AI Analysis fields
   analysisStatus?: 'loading' | 'completed' | 'dismissed' | 'accepted';
   suggestedNextDueDate?: string | null;
   suggestedNotes?: string | null;
@@ -30,4 +28,15 @@ export interface Suggestion {
   id: string;
   name: string;
   reason: string;
+}
+
+export type DietEntryType = 'food' | 'symptom';
+
+export interface DietEntry {
+  id: string;
+  type: DietEntryType;
+  name: string;
+  timestamp: number; // Unix timestamp
+  notes?: string;
+  intensity?: number; // 1-5, for symptoms
 }

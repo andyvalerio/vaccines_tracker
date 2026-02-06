@@ -1,6 +1,6 @@
-# Vaccines Tracker
+# Health Tracker
 
-A personal immunization tracker app built for my family to keep track of vaccination history and upcoming boosters. It uses **Google Gemini AI** to intelligently analyze records and suggest due dates or missing vaccines based on general medical guidelines.
+A personal health and immunization tracker app built for my family to keep track of vaccination history and upcoming boosters. It uses **Google Gemini AI** to intelligently analyze records and suggest due dates or missing vaccines based on general medical guidelines.
 
 **[👉 Use it live here](http://valerio.nu/vaccines)**
 
@@ -30,8 +30,8 @@ If you want to run this locally or host your own version, you will need a [Fireb
 
 1.  **Clone the repository**
     ```bash
-    git clone https://github.com/yourusername/vaccines-tracker.git
-    cd vaccines-tracker
+    git clone https://github.com/yourusername/health-tracker.git
+    cd health-tracker
     ```
 
 2.  **Install Frontend Dependencies**

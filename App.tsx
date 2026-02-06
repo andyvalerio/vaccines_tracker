@@ -13,7 +13,17 @@ function App() {
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>('vaccines');
+  
+  // Initialize tab from localStorage or default to 'vaccines'
+  const [activeTab, setActiveTabState] = useState<AppTab>(() => {
+    const saved = localStorage.getItem('activeTab');
+    return (saved === 'diet' || saved === 'vaccines') ? (saved as AppTab) : 'vaccines';
+  });
+
+  const setActiveTab = (tab: AppTab) => {
+    setActiveTabState(tab);
+    localStorage.setItem('activeTab', tab);
+  };
 
   useEffect(() => {
     const unsubscribeAuth = AuthService.subscribe(async (firebaseUser) => {
@@ -79,7 +89,7 @@ function App() {
                   <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
                 </svg>
             </div>
-            <span className="font-bold text-lg tracking-tight hidden sm:inline-block">Life Tracker</span>
+            <span className="font-bold text-lg tracking-tight hidden sm:inline-block">Health Tracker</span>
           </div>
           
           <nav className="flex gap-1 bg-slate-100 p-1 rounded-xl">
@@ -109,7 +119,7 @@ function App() {
         {activeTab === 'vaccines' ? (
           <VaccineTracker account={account} />
         ) : (
-          <DietTracker />
+          <DietTracker account={account} />
         )}
       </main>
     </div>

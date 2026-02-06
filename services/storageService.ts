@@ -1,7 +1,8 @@
-import { Vaccine, Account, Suggestion } from '../types';
+
+import { Vaccine, Account, Suggestion, DietEntry } from '../types';
 import { User } from 'firebase/auth';
 import { db } from '../firebaseConfig';
-import { ref, set, push, remove, onValue, off, get, child } from 'firebase/database';
+import { ref, set, push, remove, onValue, off, get, child, query, orderByChild, limitToLast } from 'firebase/database';
 
 export const StorageService = {
 
@@ -19,7 +20,6 @@ export const StorageService = {
 
   subscribeVaccines: (accountId: string, onUpdate: (vaccines: Vaccine[]) => void): () => void => {
     const vaccinesRef = ref(db, `users/${accountId}/vaccines`);
-    
     const listener = onValue(vaccinesRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) {
@@ -29,13 +29,11 @@ export const StorageService = {
       const list = Object.values(data) as Vaccine[];
       onUpdate(list);
     });
-
     return () => off(vaccinesRef, 'value', listener);
   },
 
   subscribeSuggestions: (accountId: string, onUpdate: (suggestions: Suggestion[]) => void): () => void => {
     const refPath = ref(db, `users/${accountId}/suggestions`);
-    
     const listener = onValue(refPath, (snapshot) => {
       const data = snapshot.val();
       if (!data) {
@@ -45,8 +43,25 @@ export const StorageService = {
       const list = Object.values(data) as Suggestion[];
       onUpdate(list);
     });
-
     return () => off(refPath, 'value', listener);
+  },
+
+  subscribeDietEntries: (accountId: string, onUpdate: (entries: DietEntry[]) => void): () => void => {
+    const dietRef = ref(db, `users/${accountId}/diet`);
+    const dietQuery = query(dietRef, orderByChild('timestamp'));
+    
+    const listener = onValue(dietQuery, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        onUpdate([]);
+        return;
+      }
+      const list = Object.values(data) as DietEntry[];
+      // Sort descending for timeline
+      onUpdate(list.sort((a, b) => b.timestamp - a.timestamp));
+    });
+
+    return () => off(dietRef, 'value', listener);
   },
 
   // --- Read Operations ---
@@ -65,30 +80,20 @@ export const StorageService = {
   addVaccine: async (accountId: string, vaccine: Vaccine): Promise<void> => {
     const vaccinesRef = ref(db, `users/${accountId}/vaccines`);
     const newItemRef = vaccine.id ? ref(db, `users/${accountId}/vaccines/${vaccine.id}`) : push(vaccinesRef);
-    
     const finalVaccine = { ...vaccine, id: newItemRef.key! };
-    
     Object.keys(finalVaccine).forEach(key => {
-        if ((finalVaccine as any)[key] === undefined) {
-            delete (finalVaccine as any)[key];
-        }
+        if ((finalVaccine as any)[key] === undefined) delete (finalVaccine as any)[key];
     });
-    
     await set(newItemRef, finalVaccine);
   },
 
   updateVaccine: async (accountId: string, vaccine: Vaccine): Promise<void> => {
     if (!vaccine.id) throw new Error("Cannot update vaccine without ID");
-    
     const itemRef = ref(db, `users/${accountId}/vaccines/${vaccine.id}`);
-    
     const finalVaccine = { ...vaccine };
     Object.keys(finalVaccine).forEach(key => {
-        if ((finalVaccine as any)[key] === undefined) {
-            delete (finalVaccine as any)[key];
-        }
+        if ((finalVaccine as any)[key] === undefined) delete (finalVaccine as any)[key];
     });
-
     await set(itemRef, finalVaccine);
   },
 
@@ -97,15 +102,34 @@ export const StorageService = {
     await remove(itemRef);
   },
 
+  addDietEntry: async (accountId: string, entry: Partial<DietEntry>): Promise<void> => {
+    const dietRef = ref(db, `users/${accountId}/diet`);
+    const newItemRef = push(dietRef);
+    const finalEntry = {
+      ...entry,
+      id: newItemRef.key!,
+      timestamp: entry.timestamp || Date.now()
+    };
+    
+    // Explicitly strip undefined values before saving to Firebase
+    Object.keys(finalEntry).forEach(key => {
+        if ((finalEntry as any)[key] === undefined) delete (finalEntry as any)[key];
+    });
+
+    await set(newItemRef, finalEntry);
+  },
+
+  deleteDietEntry: async (accountId: string, entryId: string): Promise<void> => {
+    const itemRef = ref(db, `users/${accountId}/diet/${entryId}`);
+    await remove(itemRef);
+  },
+
   // --- Suggestions & Dismissal Logic ---
 
   setSuggestions: async (accountId: string, suggestions: Suggestion[]): Promise<void> => {
     const refPath = ref(db, `users/${accountId}/suggestions`);
-    // Overwrite existing suggestions or set new ones
-    // We convert array to object using IDs as keys
     const data: Record<string, Suggestion> = {};
     suggestions.forEach(s => {
-      // Ensure it has an ID
       const id = s.id || push(refPath).key!;
       data[id] = { ...s, id };
     });
