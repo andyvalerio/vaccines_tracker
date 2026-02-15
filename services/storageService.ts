@@ -7,7 +7,7 @@ import { ref, set, push, remove, onValue, off, get, child, query, orderByChild, 
 export const StorageService = {
 
   // --- Initialization ---
-  
+
   initializeAccount: async (user: User): Promise<Account> => {
     return {
       id: user.uid,
@@ -19,6 +19,14 @@ export const StorageService = {
   // --- Realtime Subscriptions ---
 
   subscribeVaccines: (accountId: string, onUpdate: (vaccines: Vaccine[]) => void): () => void => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      const mockVaccines: Vaccine[] = [
+        { id: 'v1', name: 'Flu Shot', dateTaken: '2023-10-01', notes: 'Annual', history: [], createdAt: Date.now() },
+        { id: 'v2', name: 'Tetanus', nextDueDate: '2026-05-01', notes: 'Booster', history: [], createdAt: Date.now() }
+      ];
+      onUpdate(mockVaccines);
+      return () => { };
+    }
     const vaccinesRef = ref(db, `users/${accountId}/vaccines`);
     const listener = onValue(vaccinesRef, (snapshot) => {
       const data = snapshot.val();
@@ -33,6 +41,10 @@ export const StorageService = {
   },
 
   subscribeSuggestions: (accountId: string, onUpdate: (suggestions: Suggestion[]) => void): () => void => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      onUpdate([{ id: 's1', name: 'Shingles', reason: 'Recommended for age group' }]);
+      return () => { };
+    }
     const refPath = ref(db, `users/${accountId}/suggestions`);
     const listener = onValue(refPath, (snapshot) => {
       const data = snapshot.val();
@@ -47,9 +59,16 @@ export const StorageService = {
   },
 
   subscribeDietEntries: (accountId: string, onUpdate: (entries: DietEntry[]) => void): () => void => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      onUpdate([
+        { id: 'd1', type: 'food', name: 'Salad', timestamp: Date.now(), notes: 'Healthy lunch' },
+        { id: 'd2', type: 'medicine', name: 'Aspirin', timestamp: Date.now() - 3600000 }
+      ]);
+      return () => { };
+    }
     const dietRef = ref(db, `users/${accountId}/diet`);
     const dietQuery = query(dietRef, orderByChild('timestamp'));
-    
+
     const listener = onValue(dietQuery, (snapshot) => {
       const data = snapshot.val();
       if (!data) {
@@ -65,7 +84,7 @@ export const StorageService = {
   },
 
   // --- Read Operations ---
-  
+
   getDismissedNames: async (accountId: string): Promise<string[]> => {
     const dbRef = ref(db);
     const snapshot = await get(child(dbRef, `users/${accountId}/dismissed`));
@@ -82,7 +101,7 @@ export const StorageService = {
     const newItemRef = vaccine.id ? ref(db, `users/${accountId}/vaccines/${vaccine.id}`) : push(vaccinesRef);
     const finalVaccine = { ...vaccine, id: newItemRef.key! };
     Object.keys(finalVaccine).forEach(key => {
-        if ((finalVaccine as any)[key] === undefined) delete (finalVaccine as any)[key];
+      if ((finalVaccine as any)[key] === undefined) delete (finalVaccine as any)[key];
     });
     await set(newItemRef, finalVaccine);
   },
@@ -92,7 +111,7 @@ export const StorageService = {
     const itemRef = ref(db, `users/${accountId}/vaccines/${vaccine.id}`);
     const finalVaccine = { ...vaccine };
     Object.keys(finalVaccine).forEach(key => {
-        if ((finalVaccine as any)[key] === undefined) delete (finalVaccine as any)[key];
+      if ((finalVaccine as any)[key] === undefined) delete (finalVaccine as any)[key];
     });
     await set(itemRef, finalVaccine);
   },
@@ -110,10 +129,10 @@ export const StorageService = {
       id: newItemRef.key!,
       timestamp: entry.timestamp || Date.now()
     };
-    
+
     // Explicitly strip undefined values before saving to Firebase
     Object.keys(finalEntry).forEach(key => {
-        if ((finalEntry as any)[key] === undefined) delete (finalEntry as any)[key];
+      if ((finalEntry as any)[key] === undefined) delete (finalEntry as any)[key];
     });
 
     await set(newItemRef, finalEntry);

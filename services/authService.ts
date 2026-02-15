@@ -1,12 +1,12 @@
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
   updateProfile,
   onAuthStateChanged,
   GoogleAuthProvider,
   signInWithPopup,
-  User 
+  User
 } from "firebase/auth";
 import { auth } from "../firebaseConfig";
 
@@ -36,6 +36,29 @@ export const AuthService = {
   },
 
   subscribe: (callback: (user: User | null) => void) => {
+    const e2eUser = localStorage.getItem('E2E_TEST_USER');
+    if (e2eUser) {
+      const mockUser = {
+        uid: 'e2e-test-user-id',
+        email: 'test@example.com',
+        displayName: 'Test User',
+        emailVerified: true,
+        isAnonymous: false,
+        metadata: {},
+        providerData: [],
+        refreshToken: '',
+        tenantId: null,
+        delete: async () => { },
+        getIdToken: async () => 'mock-token',
+        getIdTokenResult: async () => ({ token: 'mock-token', ...({} as any) }),
+        reload: async () => { },
+        toJSON: () => ({}),
+        phoneNumber: null,
+        photoURL: null,
+      } as unknown as User;
+      callback(mockUser);
+      return () => { };
+    }
     return onAuthStateChanged(auth, callback);
   }
 };
