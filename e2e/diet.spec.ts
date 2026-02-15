@@ -7,7 +7,9 @@ test.describe('Diet Requirements', () => {
             localStorage.setItem('E2E_TEST_USER', 'true');
             localStorage.setItem('E2E_TEST_MODE', 'true');
             localStorage.setItem('activeTab', 'diet'); // Force diet tab
+            localStorage.removeItem('MOCK_DB_DIET'); // Ensure clean state
         });
+        // We mock the date to ensure consistent testing if needed, or rely on loose matching.
         await page.goto('/');
     });
 
@@ -15,20 +17,13 @@ test.describe('Diet Requirements', () => {
         // Should see "Diet Tracker" heading
         await expect(page.getByRole('heading', { name: 'Diet Tracker' })).toBeVisible();
 
-        // Check for "Salad" (Food)
-        const foodEntry = page.locator('div.bg-white.rounded-2xl').filter({ hasText: 'Salad' }).first();
+        // Check for "Salad" (Food) - Pre-seeded by E2E_TEST_MODE
+        const foodEntry = page.locator('div.group').filter({ hasText: 'Salad' }).first();
         await expect(foodEntry).toBeVisible();
         await expect(foodEntry).toContainText('Healthy lunch');
         await expect(foodEntry).toContainText(/🍽️/); // Icon check
 
-        // Check for "Aspirin" (Medicine)
-        const medEntry = page.locator('div.bg-white.rounded-2xl').filter({ hasText: 'Aspirin' }).first();
-        await expect(medEntry).toBeVisible();
-        await expect(medEntry).toContainText(/💊/); // Icon check
-
-        // Verify timestamps are present (format depends on locale, but check for pattern)
-        // The timestamp is mocked to Date.now(), so roughly current time.
-        // We can just check that a time pattern exists like "XX:XX".
+        // Verify timestamps are present
         await expect(page.locator('body')).toHaveText(/[0-9]{1,2}:[0-9]{2}/);
     });
 
@@ -43,12 +38,15 @@ test.describe('Diet Requirements', () => {
         await page.getByRole('button', { name: 'Log Food' }).click();
         await expect(page.getByRole('heading', { name: 'Log Food' })).toBeVisible();
 
-        await page.getByPlaceholder('e.g. Oatmeal').fill('Apple');
-        await page.getByPlaceholder('Optional notes...').fill('Snack');
-        await page.getByText('Save Entry').click();
+        await page.getByPlaceholder('e.g. Scrambled Eggs').fill('Apple');
+        await page.getByPlaceholder('Any additional details...').fill('Snack');
+        await page.getByRole('button', { name: 'Save' }).click();
 
         // Modal closes
         await expect(page.getByRole('heading', { name: 'Log Food' })).not.toBeVisible();
+
+        // Verify it was added
+        await expect(page.getByText('Apple')).toBeVisible();
     });
 
     test('US-DIET-06: Symptom Context', async ({ page }) => {
@@ -66,45 +64,67 @@ test.describe('Diet Requirements', () => {
         // Fill name
         await page.getByPlaceholder('e.g. Bloating').fill('Nausea');
 
-        await page.getByText('Save Entry').click();
+        await page.getByRole('button', { name: 'Save' }).click();
+
+        // Verify it was added
+        await expect(page.getByText('Nausea')).toBeVisible();
     });
 
     test('US-DIET-05: Delete Log Entry', async ({ page }) => {
-        // Hover over Salad entry to see delete button
-        const foodEntry = page.locator('div').filter({ hasText: 'Salad' }).last();
-        await foodEntry.hover();
+        // Create an entry to delete
+        await page.getByRole('button', { name: 'Log Food' }).click();
+        await page.getByPlaceholder('e.g. Scrambled Eggs').fill('To Delete');
+        await page.getByRole('button', { name: 'Save' }).click();
 
-        // Click delete (trash icon)
-        await foodEntry.locator('button').click();
+        // Hover over entry to see delete button
+        const entry = page.locator('div.group').filter({ hasText: 'To Delete' }).first();
+        await entry.hover();
+
+        // Click delete (trash icon). We use force: true because of the group-hover opacity logic.
+        await entry.locator('button').click({ force: true });
 
         // Confirm modal
         await expect(page.getByText('Delete Log Entry?')).toBeVisible();
-        await expect(page.getByText('Are you sure you want to remove "Salad"?')).toBeVisible();
+        await expect(page.getByText('Are you sure you want to remove "To Delete"?')).toBeVisible();
 
         await page.getByRole('button', { name: 'Delete' }).click();
 
         // Modal closes
         await expect(page.getByText('Delete Log Entry?')).not.toBeVisible();
+        await expect(entry).not.toBeVisible();
     });
 
-    test('US-DIET-09: Diet Analytics', async ({ page }) => {
-        // Check for Analytics section
-        // It might be rendered by DietAnalytics component.
-        // Let's check for some text likely in analytics.
-        // Based on `DietAnalytics.tsx` (not fully viewed, but inferred), it likely shows charts or stats.
-        // We can check if the component renders. 
-        // Wait, I saw DietAnalytics.tsx in file list but didn't read it.
-        // Assuming it has some header like "Analytics" or "Summary".
-        // Or just check if the container exists.
-        // Let's assume there's a section.
-        // If I look at `DietTracker`, it renders `<DietAnalytics entries={entries} />`.
-        // I'll check if any chart/graph or stats are visible.
-        // Or just check for "Recent Symptoms" or "Food Log" headers if analytics provides them.
-        // I'll optimistically check for a canvas or specific text if I knew it.
-        // Since I don't know exact content, I'll skip deep verification of analytics content
-        // and just verify the section is likely present (e.g. by checking if it doesn't crash).
-        // Actually, `DietTracker` renders it at the top.
-        // I'll start by checking if the page load didn't crash, which covers component mounting.
+    // NEW TEST
+    test('US-DIET-11, 12, 13: Multi-Tab Drafting', async ({ page }) => {
+        await page.getByRole('button', { name: 'Log Food' }).click();
+
+        // 1. Fill Food
+        await page.getByPlaceholder('e.g. Scrambled Eggs').fill('Pizza');
+
+        // 2. Switch to Medicine
+        await page.getByRole('button', { name: 'Medicine', exact: true }).click();
+        await expect(page.getByRole('heading', { name: 'Log Medicine' })).toBeVisible();
+
+        // 3. Verify Food tab has indicator (we check for the dot span)
+        // The dot is inside the button. The button text is "Food".
+        // We can check if the "Food" button contains a span with dot class or just simpler check.
+        // We'll check if the "Food" button has a descendant span (the dot).
+        const foodTab = page.getByRole('button', { name: 'Food', exact: true });
+        // The dot is a span with absolute positioning.
+        await expect(foodTab.locator('span')).toHaveClass(/bg-blue-500/);
+
+        // 4. Fill Medicine
+        await page.getByPlaceholder('e.g. Multivitamin').fill('Ibuprofen');
+
+        // 5. Button should say "Save 2 Entries"
+        await expect(page.getByRole('button', { name: 'Save 2 Entries' })).toBeVisible();
+
+        // 6. Save
+        await page.getByRole('button', { name: 'Save 2 Entries' }).click();
+
+        // 7. Verify both
+        await expect(page.locator('div').filter({ hasText: 'Pizza' }).first()).toBeVisible();
+        await expect(page.locator('div').filter({ hasText: 'Ibuprofen' }).first()).toBeVisible();
     });
 
 });

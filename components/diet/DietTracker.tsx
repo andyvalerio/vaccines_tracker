@@ -25,9 +25,9 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
     return () => unsubscribe();
   }, [account.id]);
 
-  const handleSaveEntry = async (entry: Partial<DietEntry>) => {
+  const handleSaveEntry = async (entries: Partial<DietEntry>[]) => {
     try {
-      await StorageService.addDietEntry(account.id, entry);
+      await StorageService.addDietEntries(account.id, entries);
     } catch (e) {
       console.error("Failed to save diet entry", e);
     }
@@ -93,7 +93,7 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
           <p className="text-slate-500">Log meals, meds, and track symptoms</p>
         </div>
         <div className="flex gap-2">
-           <button 
+          <button
             onClick={() => openModal('food')}
             className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-2xl shadow-lg shadow-blue-100 transition active:scale-95"
             title="Add Log Entry"
@@ -106,19 +106,19 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
       <DietAnalytics entries={entries} />
 
       <div className="flex gap-3 mb-10 hidden sm:flex">
-        <button 
+        <button
           onClick={() => openModal('food')}
           className="flex-1 bg-white border-2 border-slate-200 hover:border-blue-600 hover:text-blue-600 text-slate-700 py-4 rounded-xl font-bold transition transform active:scale-95 shadow-sm flex items-center justify-center gap-2"
         >
           <span className="text-xl">🍽️</span> Log Food
         </button>
-        <button 
+        <button
           onClick={() => openModal('medicine')}
           className="flex-1 bg-white border-2 border-slate-200 hover:border-indigo-600 hover:text-indigo-600 text-slate-700 py-4 rounded-xl font-bold transition transform active:scale-95 shadow-sm flex items-center justify-center gap-2"
         >
           <span className="text-xl">💊</span> Log Medicine
         </button>
-        <button 
+        <button
           onClick={() => openModal('symptom')}
           className="flex-1 bg-white border-2 border-slate-200 hover:border-amber-600 text-slate-700 hover:text-amber-600 py-4 rounded-xl font-bold transition flex items-center justify-center gap-2 transform active:scale-95 shadow-sm"
         >
@@ -161,7 +161,7 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
                             )}
                           </div>
                         </div>
-                        <button 
+                        <button
                           onClick={() => setEntryToDelete(entry)}
                           className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-2 bg-slate-50 rounded-lg"
                         >
@@ -182,20 +182,20 @@ const DietTracker: React.FC<DietTrackerProps> = ({ account }) => {
         )}
       </div>
 
-      <AddDietEntryModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSave={handleSaveEntry} 
+      <AddDietEntryModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleSaveEntry}
         initialType={modalType}
         prefilledName={prefilledName}
         history={entries}
       />
 
-      <ConfirmModal 
-        isOpen={!!entryToDelete} 
-        onClose={() => setEntryToDelete(null)} 
-        onConfirm={handleDelete} 
-        title="Delete Log Entry?" 
+      <ConfirmModal
+        isOpen={!!entryToDelete}
+        onClose={() => setEntryToDelete(null)}
+        onConfirm={handleDelete}
+        title="Delete Log Entry?"
         message={`Are you sure you want to remove "${entryToDelete?.name}"? This action cannot be undone.`}
       />
     </div>

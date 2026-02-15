@@ -78,3 +78,18 @@
 **As a** user
 **I want to** have quick access buttons to log food, medicine, or symptoms
 **So that** I can add entries efficiently without navigating through complex menus.
+
+### [US-DIET-11] Multi-Tab Entry Drafting
+**As a** user
+**I want to** switch between Food, Medicine, and Symptom tabs in the add entry modal without losing my input
+**So that** I can draft multiple related entries (e.g., food and medicine) before saving them all at once.
+
+### [US-DIET-12] Batch Save Entries
+**As a** user
+**I want to** save all my drafted entries (food, medicine, and/or symptoms) with a single click
+**So that** I can quickly log a complex health event without opening the modal multiple times.
+
+### [US-DIET-13] Draft Status Indicators
+**As a** user
+**I want to** see visual indicators on the tabs that have unsaved draft content
+**So that** I am aware of what will be saved when I confirm the action.

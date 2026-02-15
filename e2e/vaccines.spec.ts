@@ -21,29 +21,24 @@ test.describe('Vaccine Requirements', () => {
     });
 
     test('US-VACCINE-01: Add Vaccine Record', async ({ page }) => {
-        // Open modal
-        await page.locator('button').filter({ hasText: 'Health Tracker' }).locator('..').locator('..').locator('button.bg-blue-600').click();
-        // Wait, the FAB button is fixed bottom right. 
-        // Let's find simpler selector. The FAB has a PlusIcon.
+        // Open modal via the FAB button fixed at the bottom right
         await page.locator('.fixed.bottom-6.right-6 > button').click();
 
-        await expect(page.getByText('Add Vaccination')).toBeVisible();
+        await expect(page.getByText('Add New Record')).toBeVisible();
 
         // Fill form
-        await page.getByPlaceholder('e.g. Influenza').fill('COVID-19 Booster');
-        await page.getByLabel('Date Taken').fill('2024-01-01');
+        await page.getByPlaceholder('e.g. Tetanus, Flu Shot').fill('COVID-19 Booster');
 
-        // Save (mocked, so won't persist to DB but UI might react or close modal)
-        // Since StorageService is mocked to return static array on subscribe, 
-        // the UI list won't update with the new item unless we update the mock logic or the UI does optimistic updates.
-        // The current StorageService mock just calls onUpdate with static list. 
-        // So the list won't update.
-        // However, we can verify the interaction works.
+        // Fill Latest Dose Taken (3 selects)
+        await page.locator('select').first().selectOption({ label: '2024' });
+        await page.locator('select').nth(1).selectOption({ label: 'Jan' });
+        await page.locator('select').nth(2).selectOption({ label: '1' });
 
+        // Save
         await page.getByText('Save Record').click();
 
         // Modal should close
-        await expect(page.getByText('Add Vaccination')).not.toBeVisible();
+        await expect(page.getByText('Add New Record')).not.toBeVisible();
     });
 
     test('US-VACCINE-03: AI Vaccine Suggestions', async ({ page }) => {
