@@ -93,3 +93,35 @@
 **As a** user
 **I want to** see visual indicators on the tabs that have unsaved draft content
 **So that** I am aware of what will be saved when I confirm the action.
+
+## Blood Markers Tracker
+
+### [US-MARKER-01] Manage Markers
+**As a** user
+**I want to** add, edit, and delete custom blood markers and define their normal ranges
+**So that** I can track any type of health metric that is relevant to me.
+
+### [US-MARKER-02] Log Marker Records
+**As a** user
+**I want to** log a new value for a specific marker at a specific date, and be able to edit or delete it
+**So that** my health records remain accurate over time.
+
+### [US-MARKER-03] Visualize Timeline Graph
+**As a** user
+**I want to** view my marker records plotted on a timeline graph
+**So that** I can easily observe trends in my blood marker values.
+
+### [US-MARKER-04] Compare Markers and Select Reference
+**As a** user
+**I want to** plot multiple markers on the same graph and choose which marker's normal range is highlighted in the background
+**So that** I can visually compare different values against a specific baseline.
+
+### [US-MARKER-05] Import from Unstructured Sources
+**As a** user
+**I want to** upload unstructured documents (like PDFs) containing my blood test results
+**So that** the system can automatically extract the relevant markers, values, and dates using AI.
+
+### [US-MARKER-06] Selectively Confirm Import
+**As a** user
+**I want to** review a table of the extracted data and select/unselect specific records before confirming the import
+**So that** I have full control over what is added to my health tracker.

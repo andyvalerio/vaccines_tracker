@@ -1,5 +1,5 @@
 
-import { Vaccine, Account, Suggestion, DietEntry } from '../types';
+import { Vaccine, Account, Suggestion, DietEntry, BloodMarker, BloodMarkerRecord } from '../types';
 import { User } from 'firebase/auth';
 import { db } from '../firebaseConfig';
 import { ref, set, push, remove, onValue, off, get, child, query, orderByChild } from 'firebase/database';
@@ -220,5 +220,160 @@ export const StorageService = {
   addToDismissed: async (accountId: string, vaccineName: string): Promise<void> => {
     const refPath = ref(db, `users/${accountId}/dismissed`);
     await push(refPath, vaccineName);
+  },
+
+  // --- Blood Markers ---
+
+  _markerSubscribers: [] as ((markers: BloodMarker[]) => void)[],
+  _markerRecordSubscribers: [] as ((records: BloodMarkerRecord[]) => void)[],
+
+  _notifyMarkerSubscribers: () => {
+    const stored = localStorage.getItem('MOCK_DB_MARKERS');
+    const markers = stored ? JSON.parse(stored) : [
+      { id: 'm1', name: 'LDL Cholesterol', rangeMin: 3.0, rangeMax: 5.0 }
+    ];
+    StorageService._markerSubscribers.forEach(cb => cb(markers));
+  },
+
+  _notifyMarkerRecordSubscribers: () => {
+    const stored = localStorage.getItem('MOCK_DB_MARKER_RECORDS');
+    const records = stored ? JSON.parse(stored) : [
+      { id: 'r1', markerId: 'm1', date: '2023-10-17', value: 4.8 },
+      { id: 'r2', markerId: 'm1', date: '2024-12-02', value: 6.2 }
+    ];
+    StorageService._markerRecordSubscribers.forEach(cb => cb(records));
+  },
+
+  subscribeMarkers: (accountId: string, onUpdate: (markers: BloodMarker[]) => void): () => void => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      StorageService._markerSubscribers.push(onUpdate);
+      const stored = localStorage.getItem('MOCK_DB_MARKERS');
+      if (!stored) {
+        localStorage.setItem('MOCK_DB_MARKERS', JSON.stringify([{ id: 'm1', name: 'LDL Cholesterol', rangeMin: 3.0, rangeMax: 5.0 }]));
+      }
+      StorageService._notifyMarkerSubscribers();
+      return () => { StorageService._markerSubscribers = StorageService._markerSubscribers.filter(cb => cb !== onUpdate); };
+    }
+    const markersRef = ref(db, `users/${accountId}/markers`);
+    const listener = onValue(markersRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return onUpdate([]);
+      onUpdate(Object.values(data));
+    });
+    return () => off(markersRef, 'value', listener);
+  },
+
+  addMarker: async (accountId: string, marker: Partial<BloodMarker>): Promise<string> => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      const stored = localStorage.getItem('MOCK_DB_MARKERS');
+      const markers = stored ? JSON.parse(stored) : [];
+      const newId = 'mock_m_' + Date.now();
+      markers.push({ ...marker, id: newId });
+      localStorage.setItem('MOCK_DB_MARKERS', JSON.stringify(markers));
+      StorageService._notifyMarkerSubscribers();
+      return newId;
+    }
+    const markersRef = ref(db, `users/${accountId}/markers`);
+    const newItemRef = push(markersRef);
+    const finalItem = { ...marker, id: newItemRef.key! };
+    Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
+    await set(newItemRef, finalItem);
+    return newItemRef.key!;
+  },
+
+  updateMarker: async (accountId: string, marker: BloodMarker): Promise<void> => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      const stored = localStorage.getItem('MOCK_DB_MARKERS');
+      if (stored) {
+        const markers = JSON.parse(stored).map((m: BloodMarker) => m.id === marker.id ? marker : m);
+        localStorage.setItem('MOCK_DB_MARKERS', JSON.stringify(markers));
+        StorageService._notifyMarkerSubscribers();
+      }
+      return;
+    }
+    const itemRef = ref(db, `users/${accountId}/markers/${marker.id}`);
+    const finalItem = { ...marker };
+    Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
+    await set(itemRef, finalItem);
+  },
+
+  deleteMarker: async (accountId: string, markerId: string): Promise<void> => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      const stored = localStorage.getItem('MOCK_DB_MARKERS');
+      if (stored) {
+        const markers = JSON.parse(stored).filter((m: BloodMarker) => m.id !== markerId);
+        localStorage.setItem('MOCK_DB_MARKERS', JSON.stringify(markers));
+        StorageService._notifyMarkerSubscribers();
+      }
+      return;
+    }
+    await remove(ref(db, `users/${accountId}/markers/${markerId}`));
+  },
+
+  subscribeMarkerRecords: (accountId: string, onUpdate: (records: BloodMarkerRecord[]) => void): () => void => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      StorageService._markerRecordSubscribers.push(onUpdate);
+      const stored = localStorage.getItem('MOCK_DB_MARKER_RECORDS');
+      if (!stored) {
+        localStorage.setItem('MOCK_DB_MARKER_RECORDS', JSON.stringify([
+          { id: 'r1', markerId: 'm1', date: '2023-10-17', value: 4.8 },
+          { id: 'r2', markerId: 'm1', date: '2024-12-02', value: 6.2 }
+        ]));
+      }
+      StorageService._notifyMarkerRecordSubscribers();
+      return () => { StorageService._markerRecordSubscribers = StorageService._markerRecordSubscribers.filter(cb => cb !== onUpdate); };
+    }
+    const recordsRef = ref(db, `users/${accountId}/marker_records`);
+    const listener = onValue(recordsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return onUpdate([]);
+      onUpdate(Object.values(data));
+    });
+    return () => off(recordsRef, 'value', listener);
+  },
+
+  addMarkerRecord: async (accountId: string, record: Partial<BloodMarkerRecord>): Promise<void> => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      const stored = localStorage.getItem('MOCK_DB_MARKER_RECORDS');
+      const records = stored ? JSON.parse(stored) : [];
+      records.push({ ...record, id: 'mock_r_' + Date.now() });
+      localStorage.setItem('MOCK_DB_MARKER_RECORDS', JSON.stringify(records));
+      StorageService._notifyMarkerRecordSubscribers();
+      return;
+    }
+    const recordsRef = ref(db, `users/${accountId}/marker_records`);
+    const newItemRef = push(recordsRef);
+    const finalItem = { ...record, id: newItemRef.key! };
+    Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
+    await set(newItemRef, finalItem);
+  },
+
+  updateMarkerRecord: async (accountId: string, record: BloodMarkerRecord): Promise<void> => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      const stored = localStorage.getItem('MOCK_DB_MARKER_RECORDS');
+      if (stored) {
+        const records = JSON.parse(stored).map((r: BloodMarkerRecord) => r.id === record.id ? record : r);
+        localStorage.setItem('MOCK_DB_MARKER_RECORDS', JSON.stringify(records));
+        StorageService._notifyMarkerRecordSubscribers();
+      }
+      return;
+    }
+    const itemRef = ref(db, `users/${accountId}/marker_records/${record.id}`);
+    const finalItem = { ...record };
+    Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
+    await set(itemRef, finalItem);
+  },
+
+  deleteMarkerRecord: async (accountId: string, recordId: string): Promise<void> => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      const stored = localStorage.getItem('MOCK_DB_MARKER_RECORDS');
+      if (stored) {
+        const records = JSON.parse(stored).filter((r: BloodMarkerRecord) => r.id !== recordId);
+        localStorage.setItem('MOCK_DB_MARKER_RECORDS', JSON.stringify(records));
+        StorageService._notifyMarkerRecordSubscribers();
+      }
+      return;
+    }
+    await remove(ref(db, `users/${accountId}/marker_records/${recordId}`));
   }
 };

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.suggestDiet = exports.suggestMissingVaccines = exports.analyzeVaccine = void 0;
+exports.parseBloodMarkers = exports.suggestDiet = exports.suggestMissingVaccines = exports.analyzeVaccine = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const genai_1 = require("@google/genai");
@@ -197,6 +197,83 @@ exports.suggestDiet = (0, https_1.onCall)({ secrets: [geminiApiKey], region: "eu
             symptoms: ["Bloating", "Nausea", "Cramps"],
             medicines: ["Multivitamin", "Probiotic", "Ibuprofen"]
         };
+    }
+});
+exports.parseBloodMarkers = (0, https_1.onCall)({ secrets: [geminiApiKey], region: "europe-west1" }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'The user must be authenticated.');
+    }
+    const { text, fileData } = request.data;
+    const ai = getAiClient();
+    try {
+        const prompt = `
+      Extract EVERY SINGLE row of blood marker data from the provided document or text.
+      
+      Look for data matching this exact tabular format:
+      [Marker Name] [Value] [Unit] [Range Min]-[Range Max] [Date]
+
+      Examples from the user's laboratory document:
+      "HbA1c 30 mmol/mol 27-42 2025-10-17" 
+        -> rangeMin is 27, rangeMax is 42
+      "WBC 3.5 10E9/L 3.5-8.8 2025-10-16" 
+        -> rangeMin is 3.5, rangeMax is 8.8
+      "Haematocrit (PCV) 0.46 0 0.39-0.50 2025-10-16" 
+        -> rangeMin is 0.39, rangeMax is 0.50
+
+      RULES:
+      1. Extract EVERY row you find. Do not summarize. Do not stop early.
+      2. The hyphenated numbers (e.g. "82-98") ALWAYS represent the min and max limits.
+      3. Dates look like YYYY-MM-DD.
+      4. If a line is missing a date, use ${new Date().toISOString().split('T')[0]}.
+
+      Return a JSON array exactly matching this structure for every single line found:
+      [
+        { "name": "Marker Name", "value": 123, "date": "2025-10-16", "unit": "mmol/L", "rangeMin": 10, "rangeMax": 20 }
+      ]
+    `;
+        const contents = [{ text: prompt }];
+        if (text) {
+            contents.push({ text: text });
+        }
+        if (fileData && fileData.base64 && fileData.mimeType) {
+            contents.push({
+                inlineData: {
+                    data: fileData.base64,
+                    mimeType: fileData.mimeType
+                }
+            });
+        }
+        const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: contents,
+            config: {
+                responseMimeType: "application/json"
+            },
+        });
+        const outputText = response.text;
+        if (!outputText)
+            return [];
+        let parsed = [];
+        try {
+            parsed = JSON.parse(outputText);
+        }
+        catch (e) {
+            console.error("Failed to parse JSON", e);
+            return [];
+        }
+        // Coerce numeric types in case model outputs strings
+        return parsed.map((item) => ({
+            name: item.name,
+            value: item.value !== undefined && item.value !== null && item.value !== "" ? Number(item.value) : 0,
+            date: item.date,
+            unit: item.unit,
+            rangeMin: (item.rangeMin !== undefined && item.rangeMin !== null && item.rangeMin !== "") ? Number(item.rangeMin) : undefined,
+            rangeMax: (item.rangeMax !== undefined && item.rangeMax !== null && item.rangeMax !== "") ? Number(item.rangeMax) : undefined,
+        }));
+    }
+    catch (error) {
+        console.error("Backend Marker AI Error:", error);
+        throw new https_1.HttpsError('internal', 'Failed to parse blood markers from source');
     }
 });
 //# sourceMappingURL=index.js.map

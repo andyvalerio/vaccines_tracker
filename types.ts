@@ -41,3 +41,18 @@ export interface DietEntry {
   intensity?: number; // 1-5, for symptoms
   afterFoodDelay?: string; // e.g., "15m", "1h"
 }
+
+export interface BloodMarker {
+  id: string;
+  name: string;
+  unit?: string;
+  rangeMin?: number;
+  rangeMax?: number;
+}
+
+export interface BloodMarkerRecord {
+  id: string;
+  markerId: string;
+  date: string; // ISO date string YYYY-MM-DD
+  value: number;
+}
