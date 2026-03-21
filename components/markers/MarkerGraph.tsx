@@ -85,7 +85,10 @@ const MarkerGraph: React.FC<Props> = ({ markers, records }) => {
         });
 
         const sortedDates = Object.keys(grouped).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-        const data = sortedDates.map(date => grouped[date]);
+        const data = sortedDates.map(date => ({
+            ...grouped[date],
+            timestamp: new Date(date).getTime()
+        }));
 
         return {
             chartData: data,
@@ -154,9 +157,19 @@ const MarkerGraph: React.FC<Props> = ({ markers, records }) => {
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} dy={10} />
+                        <XAxis
+                            dataKey="timestamp"
+                            type="number"
+                            domain={['dataMin', 'dataMax']}
+                            tickFormatter={(unixTime) => new Date(unixTime).toLocaleDateString()}
+                            tick={{ fontSize: 12, fill: '#64748b' }}
+                            tickLine={false}
+                            axisLine={false}
+                            dy={10}
+                        />
                         <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickLine={false} axisLine={false} domain={[0, maxY === 'auto' ? 'auto' : Math.ceil(maxY)] as any} />
                         <Tooltip
+                            labelFormatter={(unixTime) => new Date(unixTime).toLocaleDateString()}
                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                             itemStyle={{ fontSize: '14px', fontWeight: 600 }}
                             labelStyle={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}
