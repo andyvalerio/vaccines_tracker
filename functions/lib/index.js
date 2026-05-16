@@ -1,9 +1,26 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __exportStar = (this && this.__exportStar) || function(m, exports) {
+    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseBloodMarkers = exports.suggestDiet = exports.suggestMissingVaccines = exports.analyzeVaccine = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const genai_1 = require("@google/genai");
+const app_1 = require("firebase-admin/app");
+(0, app_1.initializeApp)();
+__exportStar(require("./gym"), exports);
 // Define the secret parameter (Must set via `firebase functions:secrets:set GEMINI_API_KEY`)
 const geminiApiKey = (0, params_1.defineSecret)("GEMINI_API_KEY");
 // Initialize in the function scope to ensure secret is available

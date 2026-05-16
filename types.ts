@@ -56,3 +56,46 @@ export interface BloodMarkerRecord {
   date: string; // ISO date string YYYY-MM-DD
   value: number;
 }
+
+// -- Gym Tracker Types --
+
+export interface GymExercise {
+  id: string;
+  name: string;
+  notes?: string;
+  setCount: number;
+  targetReps: number;
+  restTimeSeconds: number;
+  setTargets: string[]; // e.g. ["15kg", "20kg", "25kg"]
+}
+
+export interface GymDay {
+  id: string;
+  name: string;
+  exerciseIds: string[];
+}
+
+export interface ActiveWorkout {
+  startedAt: number;
+  dayId: string;
+  currentExerciseIndex: number;
+  completedSetsByExercise: Record<string, number>; // exerciseId -> completed count
+  status: 'active' | 'resting' | 'finished';
+  restEndsAt?: number;
+}
+
+export interface WorkoutHistorySet {
+  exerciseId: string;
+  exerciseName: string;
+  reps: number;
+  weight?: number;
+}
+
+export interface WorkoutSession {
+  id: string;
+  startedAt: number; // Unix Timestamp
+  endedAt: number; // Unix Timestamp
+  dayId: string;
+  dayName: string;
+  exercisesCompleted: WorkoutHistorySet[];
+}
