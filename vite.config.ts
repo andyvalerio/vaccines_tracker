@@ -3,20 +3,21 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  // Set the third parameter to '' to load all env regardless of the `VITE_` prefix.
-  // Fix: Cast process to any to avoid TypeScript error about missing cwd()
   const env = loadEnv(mode, (process as any).cwd(), '');
 
   return {
-    // This is critical for hosting in a subfolder (e.g. example.com/vaccines)
-    base: './',
+    base: '/vaccines/',
     plugins: [
       react(),
       VitePWA({
         registerType: 'autoUpdate',
+        injectRegister: 'inline', // Force injection into index.html
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
         devOptions: {
           enabled: true
+        },
+        workbox: {
+          importScripts: ['/vaccines/firebase-messaging-sw.js']
         },
         manifest: {
           name: 'Health Tracker',
@@ -25,14 +26,15 @@ export default defineConfig(({ mode }) => {
           theme_color: '#ffffff',
           background_color: '#f8fafc',
           display: 'standalone',
+          // FIX: Added /vaccines/ to the icon paths so mobile operating systems can find them
           icons: [
             {
-              src: 'pwa-192x192.png',
+              src: '/vaccines/pwa-192x192.png',
               sizes: '192x192',
               type: 'image/png'
             },
             {
-              src: 'pwa-512x512.png',
+              src: '/vaccines/pwa-512x512.png',
               sizes: '512x512',
               type: 'image/png',
               purpose: 'any maskable'
@@ -42,8 +44,7 @@ export default defineConfig(({ mode }) => {
       })
     ],
     define: {
-      // API_KEY is no longer exposed to the client bundle.
-      // Logic is handled in Firebase Functions.
+      // API_KEY configuration space
     },
     build: {
       outDir: 'dist',

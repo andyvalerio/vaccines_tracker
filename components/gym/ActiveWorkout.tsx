@@ -47,7 +47,9 @@ export default function ActiveWorkout({ onFinish }: { onFinish: () => void }) {
             const messaging = getMessaging();
             const permission = await Notification.requestPermission();
             if (permission === 'granted') {
-                const token = await getToken(messaging);
+                const swPath = import.meta.env.BASE_URL + 'firebase-messaging-sw.js';
+                const registration = await navigator.serviceWorker.register(swPath);
+                const token = await getToken(messaging, { serviceWorkerRegistration: registration });
                 setMessagingToken(token);
                 return token;
             }
