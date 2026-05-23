@@ -9,6 +9,8 @@ interface ActiveWorkoutProps {
     onFinish: () => void;
 }
 
+const safeArray = <T,>(value: T[] | undefined | null): T[] => Array.isArray(value) ? value : [];
+
 const getCompletedSetCount = (workout: ActiveWorkoutState, exerciseId: string) => {
     return (workout.completedSetsByExercise || {})[exerciseId] || 0;
 };
@@ -30,7 +32,7 @@ const parseTarget = (target: string) => {
 };
 
 const buildExerciseSummary = (exercise: GymExercise, completedSets: number): WorkoutHistorySet => {
-    const completedTargets = (exercise.setTargets || []).slice(0, completedSets);
+    const completedTargets = safeArray(exercise.setTargets).slice(0, completedSets);
     const parsedTargets = completedTargets.map(parseTarget);
     const durationTotal = parsedTargets.reduce((sum, item) => sum + item.value, 0);
     const weightTotal = parsedTargets.reduce((sum, item) => sum + (item.value * exercise.targetReps), 0);
@@ -81,17 +83,17 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
 
     const routineExercises = useMemo(() => {
         if (!day) return [];
-        return (day.exerciseIds || [])
-            .map(id => exercises.find(exercise => exercise.id === id))
+        return safeArray(day.exerciseIds)
+            .map(id => safeArray(exercises).find(exercise => exercise.id === id))
             .filter(Boolean) as GymExercise[];
     }, [day, exercises]);
 
     useEffect(() => {
         if (loading || !activeWorkout) return;
         if (!day) {
-            setActiveWorkout(null);
+            onFinish();
         }
-    }, [loading, activeWorkout, day, setActiveWorkout]);
+    }, [loading, activeWorkout, day, onFinish]);
 
     useEffect(() => {
         if (!activeWorkout || routineExercises.length === 0) return;
@@ -182,9 +184,9 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
 
     const handleTargetChange = (newTarget: string) => {
         if (!currentExercise) return;
-        const updatedExercises = exercises.map(exercise => {
+        const updatedExercises = safeArray(exercises).map(exercise => {
             if (exercise.id !== currentExercise.id) return exercise;
-            const updatedTargets = [...(exercise.setTargets || [])];
+            const updatedTargets = [...safeArray(exercise.setTargets)];
             const targetIndex = Math.min(getCompletedSetCount(activeWorkout!, exercise.id), exercise.setCount - 1);
             updatedTargets[targetIndex] = newTarget;
             return { ...exercise, setTargets: updatedTargets };
@@ -198,7 +200,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         const newNum = parseFloat(newTarget) || 0;
         if (newNum <= oldNum) return;
 
-        const updatedExercise = exercises.find(exercise => exercise.id === currentExercise.id);
+        const updatedExercise = safeArray(exercises).find(exercise => exercise.id === currentExercise.id);
         if (!updatedExercise) return;
 
         try {
@@ -345,7 +347,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
 
     const currentSetsCompleted = getCompletedSetCount(activeWorkout, currentExercise.id);
     const currentSetTargetIndex = Math.min(currentSetsCompleted, currentExercise.setCount - 1);
-    const currentSetTarget = (currentExercise.setTargets || [])[currentSetTargetIndex] || '';
+    const currentSetTarget = safeArray(currentExercise.setTargets)[currentSetTargetIndex] || '';
     const parsedTarget = parseTarget(currentSetTarget);
     const isResting = activeWorkout.status === 'resting';
     const isCompleted = activeWorkout.status === 'completed';
@@ -422,7 +424,6 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                         <div className="text-center mb-6">
                             <div className="text-sm font-bold text-blue-600 uppercase tracking-widest mb-3">Rest Interval</div>
                             <div className="text-7xl font-light text-slate-800 tracking-tighter tabular-nums mb-3">{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</div>
-                            <div className="text-slate-600 font-medium">You rest here, then continue without hunting around the screen.</div>
                         </div>
 
                         <div className="grid gap-4 md:grid-cols-2 mb-6">
@@ -469,7 +470,6 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                             </button>
                         </div>
 
-                        <div className="text-xs text-slate-400 font-bold uppercase tracking-[0.35em] mb-2">Swipe Left Or Right</div>
                         <h2 className="text-3xl mx-8 font-extrabold text-slate-800 mb-6 leading-tight text-center">{currentExercise.name}</h2>
 
                         {currentSetsCompleted >= currentExercise.setCount ? (

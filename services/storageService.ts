@@ -4,6 +4,45 @@ import { User } from 'firebase/auth';
 import { db } from '../firebaseConfig';
 import { ref, set, push, remove, onValue, off, get, child, query, orderByChild } from 'firebase/database';
 
+const normalizeGymExercise = (exercise?: Partial<GymExercise> | null): GymExercise => {
+  const safeExercise = exercise || {};
+  const setCount = Math.max(1, Number(safeExercise.setCount) || 1);
+  const rawTargets = Array.isArray(safeExercise.setTargets) ? safeExercise.setTargets : [];
+  const setTargets = Array.from({ length: setCount }, (_, index) => rawTargets[index] || '');
+
+  return {
+    id: safeExercise.id || '',
+    name: safeExercise.name || 'Exercise',
+    notes: safeExercise.notes || undefined,
+    setCount,
+    targetReps: Math.max(1, Number(safeExercise.targetReps) || 1),
+    restTimeSeconds: Math.max(0, Number(safeExercise.restTimeSeconds) || 0),
+    setTargets,
+  };
+};
+
+const normalizeGymDay = (day?: Partial<GymDay> | null): GymDay => {
+  const safeDay = day || {};
+  return {
+    id: safeDay.id || '',
+    name: safeDay.name || 'Routine',
+    exerciseIds: Array.isArray(safeDay.exerciseIds) ? safeDay.exerciseIds.filter(Boolean) : [],
+  };
+};
+
+const normalizeWorkoutSession = (session?: Partial<WorkoutSession> | null): WorkoutSession => {
+  const safeSession = session || {};
+  return {
+    id: safeSession.id || '',
+    startedAt: Number(safeSession.startedAt) || Date.now(),
+    endedAt: Number(safeSession.endedAt) || Date.now(),
+    dayId: safeSession.dayId || '',
+    dayName: safeSession.dayName || 'Workout',
+    status: safeSession.status || 'completed',
+    exercisesCompleted: Array.isArray(safeSession.exercisesCompleted) ? safeSession.exercisesCompleted : [],
+  };
+};
+
 export const StorageService = {
 
   // --- Initialization ---
@@ -389,7 +428,7 @@ export const StorageService = {
       { id: 'gx2', name: 'Row Machine', setCount: 3, targetReps: 10, restTimeSeconds: 75, setTargets: ['45kg', '45kg', '45kg'] },
       { id: 'gx3', name: 'Plank', setCount: 2, targetReps: 1, restTimeSeconds: 45, setTargets: ['1mins', '1mins'] }
     ];
-    StorageService._gymExerciseSubscribers.forEach(cb => cb(exercises));
+    StorageService._gymExerciseSubscribers.forEach(cb => cb(exercises.map(normalizeGymExercise)));
   },
 
   _notifyGymDaySubscribers: () => {
@@ -397,13 +436,13 @@ export const StorageService = {
     const days = stored ? JSON.parse(stored) : [
       { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1', 'gx2', 'gx3'] }
     ];
-    StorageService._gymDaySubscribers.forEach(cb => cb(days));
+    StorageService._gymDaySubscribers.forEach(cb => cb(days.map(normalizeGymDay)));
   },
 
   _notifyGymSessionSubscribers: () => {
     const stored = localStorage.getItem('MOCK_DB_GYM_SESSIONS');
     const sessions = stored ? JSON.parse(stored) : [];
-    StorageService._gymSessionSubscribers.forEach(cb => cb(sessions));
+    StorageService._gymSessionSubscribers.forEach(cb => cb(sessions.map(normalizeWorkoutSession)));
   },
 
   subscribeGymExercises: (accountId: string, onUpdate: (exercises: GymExercise[]) => void): () => void => {
@@ -423,21 +462,22 @@ export const StorageService = {
     }
 
     const exercisesRef = ref(db, `users/${accountId}/gym/exercises`);
-    const listener = onValue(exercisesRef, (snapshot) => {
+      const listener = onValue(exercisesRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return onUpdate([]);
-      onUpdate(Object.values(data) as GymExercise[]);
+      onUpdate((Object.values(data) as Partial<GymExercise>[]).map(normalizeGymExercise));
     });
 
     return () => off(exercisesRef, 'value', listener);
   },
 
   addGymExercise: async (accountId: string, exercise: GymExercise): Promise<GymExercise> => {
+    const normalizedExercise = normalizeGymExercise(exercise);
     if (localStorage.getItem('E2E_TEST_MODE')) {
       const stored = localStorage.getItem('MOCK_DB_GYM_EXERCISES');
       const exercises = stored ? JSON.parse(stored) : [];
-      const id = exercise.id || `mock_gx_${Date.now()}`;
-      const finalExercise = { ...exercise, id };
+      const id = normalizedExercise.id || `mock_gx_${Date.now()}`;
+      const finalExercise = { ...normalizedExercise, id };
       exercises.push(finalExercise);
       localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify(exercises));
       StorageService._notifyGymExerciseSubscribers();
@@ -445,26 +485,27 @@ export const StorageService = {
     }
 
     const exercisesRef = ref(db, `users/${accountId}/gym/exercises`);
-    const newItemRef = exercise.id ? ref(db, `users/${accountId}/gym/exercises/${exercise.id}`) : push(exercisesRef);
-    const finalItem = { ...exercise, id: newItemRef.key! };
+    const newItemRef = normalizedExercise.id ? ref(db, `users/${accountId}/gym/exercises/${normalizedExercise.id}`) : push(exercisesRef);
+    const finalItem = { ...normalizedExercise, id: newItemRef.key! };
     Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
     await set(newItemRef, finalItem);
     return finalItem;
   },
 
   updateGymExercise: async (accountId: string, exercise: GymExercise): Promise<void> => {
+    const normalizedExercise = normalizeGymExercise(exercise);
     if (localStorage.getItem('E2E_TEST_MODE')) {
       const stored = localStorage.getItem('MOCK_DB_GYM_EXERCISES');
       if (stored) {
-        const exercises = JSON.parse(stored).map((item: GymExercise) => item.id === exercise.id ? exercise : item);
+        const exercises = JSON.parse(stored).map((item: GymExercise) => item.id === normalizedExercise.id ? normalizedExercise : normalizeGymExercise(item));
         localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify(exercises));
         StorageService._notifyGymExerciseSubscribers();
       }
       return;
     }
 
-    const itemRef = ref(db, `users/${accountId}/gym/exercises/${exercise.id}`);
-    const finalItem = { ...exercise };
+    const itemRef = ref(db, `users/${accountId}/gym/exercises/${normalizedExercise.id}`);
+    const finalItem = { ...normalizedExercise };
     Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
     await set(itemRef, finalItem);
   },
@@ -481,8 +522,8 @@ export const StorageService = {
 
       if (storedDays) {
         const days = JSON.parse(storedDays).map((day: GymDay) => ({
-          ...day,
-          exerciseIds: (day.exerciseIds || []).filter(id => id !== exerciseId)
+          ...normalizeGymDay(day),
+          exerciseIds: normalizeGymDay(day).exerciseIds.filter(id => id !== exerciseId)
         }));
         localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify(days));
         StorageService._notifyGymDaySubscribers();
@@ -510,21 +551,22 @@ export const StorageService = {
     }
 
     const daysRef = ref(db, `users/${accountId}/gym/days`);
-    const listener = onValue(daysRef, (snapshot) => {
+      const listener = onValue(daysRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return onUpdate([]);
-      onUpdate(Object.values(data) as GymDay[]);
+      onUpdate((Object.values(data) as Partial<GymDay>[]).map(normalizeGymDay));
     });
 
     return () => off(daysRef, 'value', listener);
   },
 
   addGymDay: async (accountId: string, day: GymDay): Promise<GymDay> => {
+    const normalizedDay = normalizeGymDay(day);
     if (localStorage.getItem('E2E_TEST_MODE')) {
       const stored = localStorage.getItem('MOCK_DB_GYM_DAYS');
       const days = stored ? JSON.parse(stored) : [];
-      const id = day.id || `mock_gd_${Date.now()}`;
-      const finalDay = { ...day, id };
+      const id = normalizedDay.id || `mock_gd_${Date.now()}`;
+      const finalDay = { ...normalizedDay, id };
       days.push(finalDay);
       localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify(days));
       StorageService._notifyGymDaySubscribers();
@@ -532,26 +574,27 @@ export const StorageService = {
     }
 
     const daysRef = ref(db, `users/${accountId}/gym/days`);
-    const newItemRef = day.id ? ref(db, `users/${accountId}/gym/days/${day.id}`) : push(daysRef);
-    const finalItem = { ...day, id: newItemRef.key! };
+    const newItemRef = normalizedDay.id ? ref(db, `users/${accountId}/gym/days/${normalizedDay.id}`) : push(daysRef);
+    const finalItem = { ...normalizedDay, id: newItemRef.key! };
     Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
     await set(newItemRef, finalItem);
     return finalItem;
   },
 
   updateGymDay: async (accountId: string, day: GymDay): Promise<void> => {
+    const normalizedDay = normalizeGymDay(day);
     if (localStorage.getItem('E2E_TEST_MODE')) {
       const stored = localStorage.getItem('MOCK_DB_GYM_DAYS');
       if (stored) {
-        const days = JSON.parse(stored).map((item: GymDay) => item.id === day.id ? day : item);
+        const days = JSON.parse(stored).map((item: GymDay) => item.id === normalizedDay.id ? normalizedDay : normalizeGymDay(item));
         localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify(days));
         StorageService._notifyGymDaySubscribers();
       }
       return;
     }
 
-    const itemRef = ref(db, `users/${accountId}/gym/days/${day.id}`);
-    const finalItem = { ...day };
+    const itemRef = ref(db, `users/${accountId}/gym/days/${normalizedDay.id}`);
+    const finalItem = { ...normalizedDay };
     Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
     await set(itemRef, finalItem);
   },
@@ -583,21 +626,22 @@ export const StorageService = {
     }
 
     const sessionsRef = ref(db, `users/${accountId}/gym/sessions`);
-    const listener = onValue(sessionsRef, (snapshot) => {
+      const listener = onValue(sessionsRef, (snapshot) => {
       const data = snapshot.val();
       if (!data) return onUpdate([]);
-      onUpdate(Object.values(data) as WorkoutSession[]);
+      onUpdate((Object.values(data) as Partial<WorkoutSession>[]).map(normalizeWorkoutSession));
     });
 
     return () => off(sessionsRef, 'value', listener);
   },
 
   addWorkoutSession: async (accountId: string, session: WorkoutSession): Promise<WorkoutSession> => {
+    const normalizedSession = normalizeWorkoutSession(session);
     if (localStorage.getItem('E2E_TEST_MODE')) {
       const stored = localStorage.getItem('MOCK_DB_GYM_SESSIONS');
       const sessions = stored ? JSON.parse(stored) : [];
-      const id = session.id || `mock_gs_${Date.now()}`;
-      const finalSession = { ...session, id };
+      const id = normalizedSession.id || `mock_gs_${Date.now()}`;
+      const finalSession = { ...normalizedSession, id };
       sessions.push(finalSession);
       localStorage.setItem('MOCK_DB_GYM_SESSIONS', JSON.stringify(sessions));
       StorageService._notifyGymSessionSubscribers();
@@ -605,8 +649,8 @@ export const StorageService = {
     }
 
     const sessionsRef = ref(db, `users/${accountId}/gym/sessions`);
-    const newItemRef = session.id ? ref(db, `users/${accountId}/gym/sessions/${session.id}`) : push(sessionsRef);
-    const finalItem = { ...session, id: newItemRef.key! };
+    const newItemRef = normalizedSession.id ? ref(db, `users/${accountId}/gym/sessions/${normalizedSession.id}`) : push(sessionsRef);
+    const finalItem = { ...normalizedSession, id: newItemRef.key! };
     Object.keys(finalItem).forEach(key => { if ((finalItem as any)[key] === undefined) delete (finalItem as any)[key]; });
     await set(newItemRef, finalItem);
     return finalItem;

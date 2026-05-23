@@ -8,6 +8,8 @@ interface WorkoutEditorProps {
     onViewProgress: (exerciseName: string) => void;
 }
 
+const safeArray = <T,>(value: T[] | undefined | null): T[] => Array.isArray(value) ? value : [];
+
 export default function WorkoutEditor({ accountId, onBack, onViewProgress }: WorkoutEditorProps) {
     const [activeTab, setActiveTab] = useState<'days' | 'exercises'>('days');
     const [days, setDays] = useState<GymDay[]>([]);
@@ -39,8 +41,8 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
     }, [exerciseSearch, exercises]);
 
     const selectedExercises = useMemo(() => {
-        return (editingDay?.exerciseIds || [])
-            .map(exerciseId => exercises.find(exercise => exercise.id === exerciseId))
+        return safeArray(editingDay?.exerciseIds)
+            .map(exerciseId => safeArray(exercises).find(exercise => exercise.id === exerciseId))
             .filter(Boolean) as GymExercise[];
     }, [editingDay, exercises]);
 
@@ -51,7 +53,7 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
             ...editingExercise,
             name: editingExercise.name.trim(),
             notes: editingExercise.notes?.trim() || undefined,
-            setTargets: Array.from({ length: editingExercise.setCount }).map((_, index) => editingExercise.setTargets[index] || '')
+            setTargets: Array.from({ length: editingExercise.setCount }).map((_, index) => safeArray(editingExercise.setTargets)[index] || '')
         };
 
         if (editingExercise.id) {
@@ -69,7 +71,7 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
         const normalizedDay = {
             ...editingDay,
             name: editingDay.name.trim(),
-            exerciseIds: editingDay.exerciseIds || []
+            exerciseIds: safeArray(editingDay.exerciseIds)
         };
 
         if (editingDay.id) {
@@ -84,10 +86,10 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
 
     const addExerciseToDay = (exerciseId: string) => {
         if (!editingDay) return;
-        if ((editingDay.exerciseIds || []).includes(exerciseId)) return;
+        if (safeArray(editingDay.exerciseIds).includes(exerciseId)) return;
         setEditingDay({
             ...editingDay,
-            exerciseIds: [...(editingDay.exerciseIds || []), exerciseId]
+            exerciseIds: [...safeArray(editingDay.exerciseIds), exerciseId]
         });
     };
 
@@ -95,13 +97,13 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
         if (!editingDay) return;
         setEditingDay({
             ...editingDay,
-            exerciseIds: (editingDay.exerciseIds || []).filter(id => id !== exerciseId)
+            exerciseIds: safeArray(editingDay.exerciseIds).filter(id => id !== exerciseId)
         });
     };
 
     const moveExerciseInDay = (exerciseId: string, targetIndex: number) => {
         if (!editingDay) return;
-        const currentIds = [...(editingDay.exerciseIds || [])];
+        const currentIds = [...safeArray(editingDay.exerciseIds)];
         const currentIndex = currentIds.indexOf(exerciseId);
         if (currentIndex === -1 || targetIndex < 0 || targetIndex >= currentIds.length) return;
         const [item] = currentIds.splice(currentIndex, 1);
@@ -111,7 +113,7 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
 
     const updateSetCount = (count: number) => {
         if (!editingExercise) return;
-        let newTargets = [...(editingExercise.setTargets || [])];
+        let newTargets = [...safeArray(editingExercise.setTargets)];
         if (count > newTargets.length) {
             newTargets = [...newTargets, ...Array(count - newTargets.length).fill('')];
         } else {
@@ -122,7 +124,7 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
 
     const updateSetTarget = (index: number, value: string) => {
         if (!editingExercise) return;
-        const newTargets = [...(editingExercise.setTargets || [])];
+        const newTargets = [...safeArray(editingExercise.setTargets)];
         newTargets[index] = value;
         setEditingExercise({ ...editingExercise, setTargets: newTargets });
     };
@@ -343,7 +345,7 @@ export default function WorkoutEditor({ accountId, onBack, onViewProgress }: Wor
                                                 </div>
                                             ) : (
                                                 filteredExercises.map(exercise => {
-                                                    const isSelected = editingDay.exerciseIds.includes(exercise.id);
+                                                    const isSelected = safeArray(editingDay.exerciseIds).includes(exercise.id);
                                                     return (
                                                         <button
                                                             key={exercise.id}

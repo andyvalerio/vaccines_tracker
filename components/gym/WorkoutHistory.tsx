@@ -216,6 +216,9 @@ export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgre
                             {week.map(day => {
                                 const trained = day.sessions.length > 0;
                                 const dateKey = day.date.toISOString().split('T')[0];
+                                const totalMins = trained
+                                    ? Math.round(day.sessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0) / 60000)
+                                    : 0;
                                 return (
                                     <button
                                         key={dateKey}
@@ -223,9 +226,12 @@ export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgre
                                         className={`rounded-2xl border p-3 min-h-[96px] text-left transition-colors ${day.inMonth ? 'bg-white' : 'bg-slate-50'} ${trained ? 'border-emerald-200 hover:bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}
                                     >
                                         <div className={`text-xs font-bold ${day.inMonth ? 'text-slate-900' : 'text-slate-400'}`}>{day.date.getDate()}</div>
-                                        <div className={`mt-4 inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${trained ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                                            {trained ? 'Trained' : 'Rest'}
-                                        </div>
+                                        {trained && (
+                                            <div className="mt-2 flex flex-col items-start gap-0.5">
+                                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 font-bold text-sm">✓</span>
+                                                {totalMins > 0 && <span className="text-[10px] font-semibold text-emerald-600 leading-tight">{totalMins}m</span>}
+                                            </div>
+                                        )}
                                     </button>
                                 );
                             })}

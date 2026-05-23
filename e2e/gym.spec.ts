@@ -70,4 +70,31 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByRole('button', { name: 'This Month' })).toBeVisible();
     });
 
+    test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
+        const pageErrors: string[] = [];
+        page.on('pageerror', error => {
+            pageErrors.push(error.message);
+        });
+
+        await page.addInitScript(() => {
+            localStorage.setItem('E2E_TEST_USER', 'true');
+            localStorage.setItem('E2E_TEST_MODE', 'true');
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx_old_1', name: 'Legacy Bench', setCount: 3, targetReps: 8, restTimeSeconds: 90 },
+                { id: 'gx_old_2', name: 'Legacy Row', targetReps: 10 }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd_old_1', name: 'Legacy Day' }
+            ]));
+            localStorage.removeItem('health_tracker_active_workout');
+        });
+
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText('Routine has no valid exercises.')).toBeVisible();
+        expect(pageErrors).toEqual([]);
+    });
+
 });
