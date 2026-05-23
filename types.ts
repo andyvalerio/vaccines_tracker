@@ -80,15 +80,22 @@ export interface ActiveWorkout {
   dayId: string;
   currentExerciseIndex: number;
   completedSetsByExercise: Record<string, number>; // exerciseId -> completed count
-  status: 'active' | 'resting' | 'finished';
+  status: 'active' | 'resting' | 'completed';
   restEndsAt?: number;
+  completedAt?: number;
+  lastCompletedExerciseId?: string;
 }
 
 export interface WorkoutHistorySet {
   exerciseId: string;
   exerciseName: string;
-  reps: number;
-  weight?: number;
+  completedSets: number;
+  targetReps: number;
+  totalReps: number;
+  totalVolume: number;
+  unit: string;
+  metric: 'weight' | 'duration';
+  setTargets: string[];
 }
 
 export interface WorkoutSession {
@@ -98,4 +105,5 @@ export interface WorkoutSession {
   dayId: string;
   dayName: string;
   exercisesCompleted: WorkoutHistorySet[];
+  status?: 'completed' | 'abandoned';
 }

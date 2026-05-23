@@ -1,107 +1,237 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StorageService } from '../../services/storageService';
 import { WorkoutSession } from '../../types';
-import { getWorkoutSessions, deleteWorkoutSession } from '../../services/gymService';
 
-export default function WorkoutHistory({ onBack }: { onBack: () => void }) {
+interface WorkoutHistoryProps {
+    accountId: string;
+    onBack: () => void;
+    onOpenExerciseProgress: (exerciseName: string) => void;
+}
+
+const startOfMonth = (date: Date) => {
+    const next = new Date(date.getFullYear(), date.getMonth(), 1);
+    next.setHours(0, 0, 0, 0);
+    return next;
+};
+
+const endOfMonth = (date: Date) => {
+    const next = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    next.setHours(23, 59, 59, 999);
+    return next;
+};
+
+const startOfCalendarWeek = (date: Date) => {
+    const next = new Date(date);
+    const day = next.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    next.setDate(next.getDate() + diff);
+    next.setHours(0, 0, 0, 0);
+    return next;
+};
+
+const addDays = (date: Date, amount: number) => {
+    const next = new Date(date);
+    next.setDate(next.getDate() + amount);
+    return next;
+};
+
+export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgress }: WorkoutHistoryProps) {
     const [sessions, setSessions] = useState<WorkoutSession[]>([]);
     const [loading, setLoading] = useState(true);
+    const [monthOffset, setMonthOffset] = useState(0);
+    const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
 
     useEffect(() => {
-        loadSessions();
-    }, []);
+        const unsubscribe = StorageService.subscribeWorkoutSessions(accountId, (loadedSessions) => {
+            setSessions([...loadedSessions].sort((a, b) => b.startedAt - a.startedAt));
+            setLoading(false);
+        });
 
-    const loadSessions = async () => {
-        setLoading(true);
-        try {
-            const s = await getWorkoutSessions();
-            // Sort descending (newest first)
-            s.sort((a, b) => b.startedAt - a.startedAt);
-            setSessions(s);
-        } catch (e) {
-            console.error(e);
+        return () => unsubscribe();
+    }, [accountId]);
+
+    const currentMonth = useMemo(() => {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+    }, [monthOffset]);
+
+    const monthStart = startOfMonth(currentMonth);
+    const monthEnd = endOfMonth(currentMonth);
+
+    const monthSessions = useMemo(() => {
+        return sessions.filter(session => {
+            const date = new Date(session.startedAt);
+            return date >= monthStart && date <= monthEnd;
+        });
+    }, [sessions, monthStart, monthEnd]);
+
+    const sessionsByDate = useMemo(() => {
+        const map = new Map<string, WorkoutSession[]>();
+        monthSessions.forEach(session => {
+            const key = new Date(session.startedAt).toISOString().split('T')[0];
+            const existing = map.get(key) || [];
+            existing.push(session);
+            map.set(key, existing);
+        });
+        return map;
+    }, [monthSessions]);
+
+    const weeks = useMemo(() => {
+        const firstGridDay = startOfCalendarWeek(monthStart);
+        const rows: Array<Array<{ date: Date; inMonth: boolean; sessions: WorkoutSession[] }>> = [];
+        let cursor = new Date(firstGridDay);
+
+        while (cursor <= monthEnd || cursor.getDay() !== 1 || rows.length === 0) {
+            const row = Array.from({ length: 7 }).map((_, index) => {
+                const date = addDays(cursor, index);
+                const key = date.toISOString().split('T')[0];
+                return {
+                    date,
+                    inMonth: date.getMonth() === currentMonth.getMonth(),
+                    sessions: sessionsByDate.get(key) || []
+                };
+            });
+            rows.push(row);
+            cursor = addDays(cursor, 7);
+            if (cursor > monthEnd && cursor.getMonth() !== currentMonth.getMonth() && cursor.getDay() === 1) {
+                break;
+            }
         }
-        setLoading(false);
-    };
+
+        return rows;
+    }, [currentMonth, monthEnd, monthStart, sessionsByDate]);
+
+    const selectedDateSessions = useMemo(() => {
+        if (!selectedDateKey) return [];
+        return sessions.filter(session => new Date(session.startedAt).toISOString().split('T')[0] === selectedDateKey);
+    }, [sessions, selectedDateKey]);
 
     const handleDelete = async (id: string) => {
-        if (confirm("Are you sure you want to delete this session?")) {
-            await deleteWorkoutSession(id);
-            loadSessions();
+        if (confirm('Are you sure you want to delete this session?')) {
+            await StorageService.deleteWorkoutSession(accountId, id);
         }
     };
 
-    // Group sessions by month/year for a simple calendar-list view
-    const groupedSessions = sessions.reduce((acc, session) => {
-        const date = new Date(session.startedAt);
-        const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        if (!acc[monthYear]) acc[monthYear] = [];
-        acc[monthYear].push(session);
-        return acc;
-    }, {} as Record<string, WorkoutSession[]>);
-
     if (loading) return <div className="p-4 text-slate-500 animate-pulse">Loading history...</div>;
+
+    if (selectedDateKey) {
+        return (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm">
+                <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <button onClick={() => setSelectedDateKey(null)} className="text-blue-600 font-medium hover:text-blue-700">&larr; Back</button>
+                    <h2 className="text-lg font-bold text-slate-800">{selectedDateKey}</h2>
+                    <div className="w-12"></div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    <div>
+                        <h3 className="font-bold text-slate-800 text-lg">Workout Details</h3>
+                        <p className="text-slate-500 text-sm">Pick any exercise below to open its progress page.</p>
+                    </div>
+
+                    {selectedDateSessions.length === 0 ? (
+                        <div className="text-center py-10 text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                            No saved sessions for this day.
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {selectedDateSessions.map(session => {
+                                const durationStr = session.endedAt ? `${Math.round((session.endedAt - session.startedAt) / 60000)} min` : 'Ongoing';
+                                return (
+                                    <div key={session.id} className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+                                        <div className="flex items-start justify-between gap-4 mb-4">
+                                            <div>
+                                                <div className="font-bold text-slate-900 text-lg">{session.dayName}</div>
+                                                <div className="text-sm text-slate-500">{new Date(session.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {durationStr}</div>
+                                            </div>
+                                            <button onClick={() => handleDelete(session.id)} className="px-3 py-1.5 text-red-600 font-medium bg-red-50 rounded-lg hover:bg-red-100">Delete</button>
+                                        </div>
+
+                                        <div className="grid gap-3">
+                                            {session.exercisesCompleted?.map((exercise, index) => (
+                                                <button
+                                                    key={`${session.id}-${exercise.exerciseId}-${index}`}
+                                                    onClick={() => onOpenExerciseProgress(exercise.exerciseName)}
+                                                    className="text-left rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 px-4 py-3 transition-colors"
+                                                >
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <div>
+                                                            <div className="font-semibold text-slate-900">{exercise.exerciseName}</div>
+                                                            <div className="text-xs text-slate-500 mt-1">{exercise.completedSets} sets • {exercise.totalReps} reps</div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div className="font-bold text-slate-800">{exercise.totalVolume} {exercise.unit}</div>
+                                                            <div className="text-[10px] uppercase tracking-widest text-slate-400">Open Progress</div>
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <button onClick={onBack} className="text-blue-600 font-medium hover:text-blue-700">&larr; Back</button>
                 <h2 className="text-lg font-bold text-slate-800">Workout History</h2>
-                <div className="w-12"></div> {/* Spacer for centering */}
+                <div className="w-12"></div>
             </div>
 
-            <div className="p-6">
-                {Object.keys(groupedSessions).length === 0 ? (
-                    <div className="text-center p-8 border border-dashed border-slate-300 rounded-xl bg-slate-50 text-slate-500 font-medium">
-                        No workouts completed yet.
+            <div className="p-6 space-y-6">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                        <h3 className="font-bold text-slate-800 text-lg">Monthly Calendar</h3>
+                        <p className="text-slate-500 text-sm">Month by month, with the weeks stacked vertically and a simple trained or not-trained signal.</p>
                     </div>
-                ) : (
-                    <div className="space-y-8">
-                        {Object.entries(groupedSessions).map(([month, monthSessions]) => (
-                            <div key={month} className="space-y-4">
-                                <h3 className="font-bold text-slate-800 border-b border-slate-100 pb-2 text-lg">{month}</h3>
-
-                                <div className="space-y-3">
-                                    {monthSessions.map(s => {
-                                        const date = new Date(s.startedAt);
-                                        const durationStr = s.endedAt ? Math.round((s.endedAt - s.startedAt) / 60000) + ' min' : 'Ongoing';
-
-                                        return (
-                                            <div key={s.id} className="p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-shadow">
-                                                <div className="flex justify-between items-center mb-3">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="bg-blue-50 text-blue-700 font-bold w-12 h-12 rounded-xl flex flex-col items-center justify-center border border-blue-100">
-                                                            <span className="text-sm leading-none">{date.getDate()}</span>
-                                                            <span className="text-[10px] uppercase">{date.toLocaleString('default', { weekday: 'short' })}</span>
-                                                        </div>
-                                                        <div>
-                                                            <div className="font-bold text-slate-800 text-base">{s.dayName}</div>
-                                                            <div className="text-xs text-slate-500 font-medium">{date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {durationStr}</div>
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={() => handleDelete(s.id)} className="text-slate-300 hover:text-red-500 transition-colors" title="Delete Session">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                            <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
-
-                                                {s.exercisesCompleted && s.exercisesCompleted.length > 0 && (
-                                                    <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">
-                                                        {s.exercisesCompleted.map((ec, idx) => (
-                                                            <span key={idx} className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wide uppercase">
-                                                                {ec.exerciseName} <span className="opacity-50">x{ec.reps}</span>
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        ))}
+                    <div className="flex gap-2">
+                        <button onClick={() => setMonthOffset(monthOffset - 1)} className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold">Prev Month</button>
+                        <button onClick={() => setMonthOffset(0)} className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold">This Month</button>
+                        <button onClick={() => setMonthOffset(monthOffset + 1)} disabled={monthOffset >= 0} className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold disabled:opacity-40">Next Month</button>
                     </div>
-                )}
+                </div>
+
+                <div className="text-2xl font-extrabold text-slate-900">{currentMonth.toLocaleDateString([], { month: 'long', year: 'numeric' })}</div>
+
+                <div className="space-y-3">
+                    <div className="grid grid-cols-7 gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1">
+                        <span>Mon</span>
+                        <span>Tue</span>
+                        <span>Wed</span>
+                        <span>Thu</span>
+                        <span>Fri</span>
+                        <span>Sat</span>
+                        <span>Sun</span>
+                    </div>
+
+                    {weeks.map((week, weekIndex) => (
+                        <div key={weekIndex} className="grid grid-cols-7 gap-2">
+                            {week.map(day => {
+                                const trained = day.sessions.length > 0;
+                                const dateKey = day.date.toISOString().split('T')[0];
+                                return (
+                                    <button
+                                        key={dateKey}
+                                        onClick={() => setSelectedDateKey(dateKey)}
+                                        className={`rounded-2xl border p-3 min-h-[96px] text-left transition-colors ${day.inMonth ? 'bg-white' : 'bg-slate-50'} ${trained ? 'border-emerald-200 hover:bg-emerald-50' : 'border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        <div className={`text-xs font-bold ${day.inMonth ? 'text-slate-900' : 'text-slate-400'}`}>{day.date.getDate()}</div>
+                                        <div className={`mt-4 inline-flex px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${trained ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                                            {trained ? 'Trained' : 'Rest'}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ))}
+                </div>
             </div>
         </div>
     );

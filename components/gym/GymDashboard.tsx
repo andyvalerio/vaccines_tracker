@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Account, GymDay } from '../../types';
-import { getGymDays } from '../../services/gymService';
+import { StorageService } from '../../services/storageService';
 import WorkoutEditor from './WorkoutEditor';
 import ActiveWorkout from './ActiveWorkout';
 import WorkoutHistory from './WorkoutHistory';
+import ExerciseProgressView from './ExerciseProgressView';
 import { useWorkoutSession } from '../../hooks/useWorkoutSession';
 
 interface GymDashboardProps {
@@ -11,10 +12,11 @@ interface GymDashboardProps {
 }
 
 export default function GymDashboard({ account }: GymDashboardProps) {
-    const [activeView, setActiveView] = useState<'dashboard' | 'editor' | 'workout' | 'history'>('dashboard');
+    const [activeView, setActiveView] = useState<'dashboard' | 'editor' | 'workout' | 'history' | 'exercise-progress'>('dashboard');
     const [days, setDays] = useState<GymDay[]>([]);
     const [loading, setLoading] = useState(true);
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [selectedExerciseName, setSelectedExerciseName] = useState<string | null>(null);
 
     const { activeWorkout, setActiveWorkout } = useWorkoutSession();
 
@@ -27,25 +29,31 @@ export default function GymDashboard({ account }: GymDashboardProps) {
         return () => window.removeEventListener('beforeinstallprompt', handler);
     }, []);
 
-    const loadData = async () => {
-        setLoading(true);
-        const d = await getGymDays();
-        setDays(d);
-        setLoading(false);
-    };
-
     useEffect(() => {
-        if (activeView === 'dashboard') {
-            loadData();
-        }
-    }, [activeView]);
+        const unsubscribe = StorageService.subscribeGymDays(account.id, (loadedDays) => {
+            setDays(loadedDays);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [account.id]);
 
     // If there's an active workout stored, force them into it
     useEffect(() => {
-        if (activeWorkout && activeWorkout.status !== 'finished') {
+        if (activeWorkout) {
             setActiveView('workout');
         }
     }, [activeWorkout]);
+
+    useEffect(() => {
+        if (loading || !activeWorkout) return;
+
+        const routineExists = days.some(day => day.id === activeWorkout.dayId);
+        if (!routineExists) {
+            setActiveWorkout(null);
+            setActiveView('dashboard');
+        }
+    }, [loading, activeWorkout, days, setActiveWorkout]);
 
     const startWorkout = (dayId: string) => {
         setActiveWorkout({
@@ -61,7 +69,12 @@ export default function GymDashboard({ account }: GymDashboardProps) {
     const finishWorkout = () => {
         setActiveWorkout(null);
         setActiveView('history');
-    }
+    };
+
+    const openExerciseProgress = (exerciseName: string) => {
+        setSelectedExerciseName(exerciseName);
+        setActiveView('exercise-progress');
+    };
 
     const handleInstallClick = async () => {
         if (deferredPrompt) {
@@ -73,9 +86,10 @@ export default function GymDashboard({ account }: GymDashboardProps) {
         }
     };
 
-    if (activeView === 'editor') return <WorkoutEditor onBack={() => setActiveView('dashboard')} />;
-    if (activeView === 'workout' && activeWorkout) return <ActiveWorkout onFinish={finishWorkout} />;
-    if (activeView === 'history') return <WorkoutHistory onBack={() => setActiveView('dashboard')} />;
+    if (activeView === 'editor') return <WorkoutEditor accountId={account.id} onBack={() => setActiveView('dashboard')} onViewProgress={openExerciseProgress} />;
+    if (activeView === 'workout' && activeWorkout) return <ActiveWorkout accountId={account.id} onFinish={finishWorkout} />;
+    if (activeView === 'history') return <WorkoutHistory accountId={account.id} onBack={() => setActiveView('dashboard')} onOpenExerciseProgress={openExerciseProgress} />;
+    if (activeView === 'exercise-progress' && selectedExerciseName) return <ExerciseProgressView accountId={account.id} exerciseName={selectedExerciseName} onBack={() => setActiveView('history')} />;
 
     return (
         <div className="space-y-6 animate-fade-in shadow-none p-0">
