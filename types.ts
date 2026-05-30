@@ -84,6 +84,8 @@ export interface ActiveWorkout {
   restEndsAt?: number;
   completedAt?: number;
   lastCompletedExerciseId?: string;
+  setStartedAt?: number; // when the current set began (for time-based duration tracking)
+  actualSetDurations?: Record<string, number[]>; // exerciseId -> elapsed seconds per completed set
 }
 
 export interface WorkoutHistorySet {

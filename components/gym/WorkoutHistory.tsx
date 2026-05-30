@@ -161,7 +161,7 @@ export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgre
                                                         </div>
                                                         <div className="text-right">
                                                             <div className="font-bold text-slate-800">{exercise.totalVolume} {exercise.unit}</div>
-                                                            <div className="text-[10px] uppercase tracking-widest text-slate-400">Open Progress</div>
+                                                            <div className="text-[10px] uppercase tracking-widest text-slate-400">Progress</div>
                                                         </div>
                                                     </div>
                                                 </button>

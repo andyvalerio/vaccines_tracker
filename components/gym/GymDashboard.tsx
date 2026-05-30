@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Account, GymDay } from '../../types';
 import { StorageService } from '../../services/storageService';
 import WorkoutEditor from './WorkoutEditor';
@@ -7,18 +7,34 @@ import WorkoutHistory from './WorkoutHistory';
 import ExerciseProgressView from './ExerciseProgressView';
 import { useWorkoutSession } from '../../hooks/useWorkoutSession';
 
+type GymView = 'dashboard' | 'editor' | 'workout' | 'history' | 'exercise-progress';
+
 interface GymDashboardProps {
     account: Account;
 }
 
 export default function GymDashboard({ account }: GymDashboardProps) {
-    const [activeView, setActiveView] = useState<'dashboard' | 'editor' | 'workout' | 'history' | 'exercise-progress'>('dashboard');
+    const [activeView, setActiveViewState] = useState<GymView>('dashboard');
     const [days, setDays] = useState<GymDay[]>([]);
     const [loading, setLoading] = useState(true);
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [selectedExerciseName, setSelectedExerciseName] = useState<string | null>(null);
 
     const { activeWorkout, setActiveWorkout } = useWorkoutSession();
+
+    const navigateTo = useCallback((view: GymView, backView: GymView = 'dashboard') => {
+        window.history.pushState({ gymView: view, gymBackView: backView }, '');
+        setActiveViewState(view);
+    }, []);
+
+    useEffect(() => {
+        const handlePopState = (event: PopStateEvent) => {
+            const backView = (event.state?.gymBackView as GymView) || 'dashboard';
+            setActiveViewState(backView);
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
 
     useEffect(() => {
         const handler = (e: any) => {
@@ -34,62 +50,55 @@ export default function GymDashboard({ account }: GymDashboardProps) {
             setDays(loadedDays);
             setLoading(false);
         });
-
         return () => unsubscribe();
     }, [account.id]);
 
-    // If there's an active workout stored, force them into it
-    useEffect(() => {
-        if (activeWorkout) {
-            setActiveView('workout');
-        }
-    }, [activeWorkout]);
-
     useEffect(() => {
         if (loading || !activeWorkout) return;
-
         const routineExists = days.some(day => day.id === activeWorkout.dayId);
         if (!routineExists) {
             setActiveWorkout(null);
-            setActiveView('dashboard');
+            setActiveViewState('dashboard');
         }
     }, [loading, activeWorkout, days, setActiveWorkout]);
 
     const startWorkout = (dayId: string) => {
+        const now = Date.now();
         setActiveWorkout({
-            startedAt: Date.now(),
-            dayId: dayId,
+            startedAt: now,
+            dayId,
             currentExerciseIndex: 0,
             completedSetsByExercise: {},
-            status: 'active'
+            status: 'active',
+            setStartedAt: now,
         });
-        setActiveView('workout');
+        navigateTo('workout');
     };
 
     const finishWorkout = () => {
         setActiveWorkout(null);
-        setActiveView('history');
+        navigateTo('history');
     };
 
     const openExerciseProgress = (exerciseName: string) => {
         setSelectedExerciseName(exerciseName);
-        setActiveView('exercise-progress');
+        navigateTo('exercise-progress', 'history');
     };
 
     const handleInstallClick = async () => {
         if (deferredPrompt) {
             deferredPrompt.prompt();
             const { outcome } = await deferredPrompt.userChoice;
-            if (outcome === 'accepted') {
-                setDeferredPrompt(null);
-            }
+            if (outcome === 'accepted') setDeferredPrompt(null);
         }
     };
 
-    if (activeView === 'editor') return <WorkoutEditor accountId={account.id} onBack={() => setActiveView('dashboard')} onViewProgress={openExerciseProgress} />;
+    const activeDayName = activeWorkout ? days.find(d => d.id === activeWorkout.dayId)?.name : null;
+
+    if (activeView === 'editor') return <WorkoutEditor accountId={account.id} onBack={() => navigateTo('dashboard')} onViewProgress={openExerciseProgress} />;
     if (activeView === 'workout' && activeWorkout) return <ActiveWorkout accountId={account.id} onFinish={finishWorkout} />;
-    if (activeView === 'history') return <WorkoutHistory accountId={account.id} onBack={() => setActiveView('dashboard')} onOpenExerciseProgress={openExerciseProgress} />;
-    if (activeView === 'exercise-progress' && selectedExerciseName) return <ExerciseProgressView accountId={account.id} exerciseName={selectedExerciseName} onBack={() => setActiveView('history')} />;
+    if (activeView === 'history') return <WorkoutHistory accountId={account.id} onBack={() => navigateTo('dashboard')} onOpenExerciseProgress={openExerciseProgress} />;
+    if (activeView === 'exercise-progress' && selectedExerciseName) return <ExerciseProgressView accountId={account.id} exerciseName={selectedExerciseName} onBack={() => navigateTo('history')} />;
 
     return (
         <div className="space-y-6 animate-fade-in shadow-none p-0">
@@ -103,14 +112,26 @@ export default function GymDashboard({ account }: GymDashboardProps) {
                     )}
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setActiveView('history')} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg text-sm font-bold hover:bg-slate-300 transition-colors">
+                    <button onClick={() => navigateTo('history')} className="px-4 py-2 bg-slate-200 text-slate-800 rounded-lg text-sm font-bold hover:bg-slate-300 transition-colors">
                         History
                     </button>
-                    <button onClick={() => setActiveView('editor')} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors">
+                    <button onClick={() => navigateTo('editor')} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors">
                         Routines
                     </button>
                 </div>
             </div>
+
+            {activeDayName && (
+                <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-3">
+                    <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-blue-600 mb-0.5">Active Session</div>
+                        <div className="font-bold text-slate-800">{activeDayName}</div>
+                    </div>
+                    <button onClick={() => navigateTo('workout')} className="px-5 py-2.5 bg-blue-600 text-white font-bold rounded-xl text-sm hover:bg-blue-700 transition-colors shadow-md shrink-0">
+                        Resume
+                    </button>
+                </div>
+            )}
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                 <h3 className="text-lg font-bold text-slate-800 mb-2">Start a Workout</h3>
@@ -121,7 +142,7 @@ export default function GymDashboard({ account }: GymDashboardProps) {
                 ) : days.length === 0 ? (
                     <div className="text-center p-8 border border-dashed border-slate-300 bg-slate-50 rounded-xl">
                         <p className="text-slate-500 mb-4 font-medium">You have no routines.</p>
-                        <button onClick={() => setActiveView('editor')} className="text-blue-600 font-bold hover:text-blue-800 hover:underline">Create Routine Now</button>
+                        <button onClick={() => navigateTo('editor')} className="text-blue-600 font-bold hover:text-blue-800 hover:underline">Create Routine Now</button>
                     </div>
                 ) : (
                     <div className="grid gap-3 sm:grid-cols-2">
