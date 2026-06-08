@@ -351,21 +351,27 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                 </div>
             )}
 
-            {/* Header — symmetric Abandon / Save & Complete */}
+            {/* Header — day name with subtle icon actions */}
             {!isCompleted && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-2">
                     <button
                         onClick={abandonSession}
-                        className="flex-1 py-2 text-xs font-bold text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition-colors text-center"
+                        title="Abandon session"
+                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
                     >
-                        Abandon
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
-                    <div className="text-[11px] font-bold text-slate-400 shrink-0 truncate max-w-[30%] text-center">{day?.name}</div>
+                    <div className="font-bold text-slate-800 text-sm truncate">{day?.name}</div>
                     <button
                         onClick={handleSaveAndCompleteSession}
-                        className="flex-1 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition-colors text-center"
+                        title="Save & complete session"
+                        className="p-2 text-slate-300 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors"
                     >
-                        Save & Complete
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
                     </button>
                 </div>
             )}

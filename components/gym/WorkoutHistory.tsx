@@ -8,6 +8,9 @@ interface WorkoutHistoryProps {
     onOpenExerciseProgress: (exerciseName: string) => void;
 }
 
+const localDateKey = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
 const startOfMonth = (date: Date) => {
     const next = new Date(date.getFullYear(), date.getMonth(), 1);
     next.setHours(0, 0, 0, 0);
@@ -68,7 +71,7 @@ export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgre
     const sessionsByDate = useMemo(() => {
         const map = new Map<string, WorkoutSession[]>();
         monthSessions.forEach(session => {
-            const key = new Date(session.startedAt).toISOString().split('T')[0];
+            const key = localDateKey(new Date(session.startedAt));
             const existing = map.get(key) || [];
             existing.push(session);
             map.set(key, existing);
@@ -84,7 +87,7 @@ export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgre
         while (cursor <= monthEnd || cursor.getDay() !== 1 || rows.length === 0) {
             const row = Array.from({ length: 7 }).map((_, index) => {
                 const date = addDays(cursor, index);
-                const key = date.toISOString().split('T')[0];
+                const key = localDateKey(date);
                 return {
                     date,
                     inMonth: date.getMonth() === currentMonth.getMonth(),
@@ -103,7 +106,7 @@ export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgre
 
     const selectedDateSessions = useMemo(() => {
         if (!selectedDateKey) return [];
-        return sessions.filter(session => new Date(session.startedAt).toISOString().split('T')[0] === selectedDateKey);
+        return sessions.filter(session => localDateKey(new Date(session.startedAt)) === selectedDateKey);
     }, [sessions, selectedDateKey]);
 
     const handleDelete = async (id: string) => {
@@ -215,7 +218,7 @@ export default function WorkoutHistory({ accountId, onBack, onOpenExerciseProgre
                         <div key={weekIndex} className="grid grid-cols-7 gap-2">
                             {week.map(day => {
                                 const trained = day.sessions.length > 0;
-                                const dateKey = day.date.toISOString().split('T')[0];
+                                const dateKey = localDateKey(day.date);
                                 const totalMins = trained
                                     ? Math.round(day.sessions.reduce((sum, s) => sum + (s.endedAt - s.startedAt), 0) / 60000)
                                     : 0;

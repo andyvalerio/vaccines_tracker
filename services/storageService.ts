@@ -59,9 +59,12 @@ export const StorageService = {
 
   subscribeVaccines: (accountId: string, onUpdate: (vaccines: Vaccine[]) => void): () => void => {
     if (localStorage.getItem('E2E_TEST_MODE')) {
+      const in30Days = new Date();
+      in30Days.setDate(in30Days.getDate() + 30);
+      const tetanusNextDue = in30Days.toISOString().split('T')[0];
       const mockVaccines: Vaccine[] = [
         { id: 'v1', name: 'Flu Shot', dateTaken: '2023-10-01', notes: 'Annual', history: [], createdAt: Date.now() },
-        { id: 'v2', name: 'Tetanus', nextDueDate: '2026-05-01', notes: 'Booster', history: [], createdAt: Date.now() }
+        { id: 'v2', name: 'Tetanus', nextDueDate: tetanusNextDue, notes: 'Booster', history: [], createdAt: Date.now() }
       ];
       onUpdate(mockVaccines);
       return () => { };

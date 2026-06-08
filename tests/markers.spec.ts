@@ -99,7 +99,7 @@ test.describe('Blood Markers Requirements', () => {
         await page.getByRole('button', { name: 'Import Document' }).click();
         await expect(page.getByText('Extract markers from document')).toBeVisible();
 
-        // Attach a dummy file
+        // Attach a dummy file — parsing starts automatically on file select
         const fileInput = await page.locator('input[type="file"]');
         await fileInput.setInputFiles({
             name: 'test_report.pdf',
@@ -107,13 +107,10 @@ test.describe('Blood Markers Requirements', () => {
             buffer: Buffer.from('dummy pdf content')
         });
 
-        // Click Parse
-        await page.getByRole('button', { name: 'Extract Data' }).click();
-
         // The mock will return two items
         await expect(page.getByText('Extracted Results')).toBeVisible();
         await expect(page.getByText('Vitamin D (ng/mL)')).toBeVisible();
-        await expect(page.getByText('25')).toBeVisible(); // Vitamin D value
+        await expect(page.getByRole('cell', { name: '25', exact: true })).toBeVisible(); // Vitamin D value
 
         // Unselect the first row
         await page.getByRole('cell', { name: 'LDL Cholesterol (mmol/L)' }).click(); // clicks on the row
