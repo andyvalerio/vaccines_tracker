@@ -283,10 +283,8 @@ test.describe('Gym Tracker Requirements', () => {
     });
 
     // US-GYM-19 — editing exercise notes mid-session.
-    // These encode the agreed contract for a feature that is not built yet, so they are marked
-    // fixme. Change `test.fixme` to `test` in the same commit that lands the note editor.
 
-    test.fixme('US-GYM-19: A note added during a set is saved onto the exercise itself', async ({ page }) => {
+    test('US-GYM-19: A note added during a set is saved onto the exercise itself', async ({ page }) => {
         await page.getByRole('button', { name: 'Start' }).first().click();
 
         // Bench Press has no note yet, so the field offers to add one.
@@ -306,14 +304,15 @@ test.describe('Gym Tracker Requirements', () => {
             .toHaveValue('Elbows tucked, pause on chest');
     });
 
-    test.fixme('US-GYM-19: The rest screen edits the note of the exercise just completed', async ({ page }) => {
+    test('US-GYM-19: During rest the note belongs to the exercise shown under Up Next', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('E2E_TEST_USER', 'true');
             localStorage.setItem('E2E_TEST_MODE', 'true');
             localStorage.removeItem('health_tracker_active_workout');
+            // Bench Press has a single set, so completing it hands the rest screen over to Row Machine.
             localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
-                { id: 'gx1', name: 'Bench Press', notes: 'Old cue', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'] },
-                { id: 'gx2', name: 'Row Machine', setCount: 3, targetReps: 10, restTimeSeconds: 75, setTargets: ['45kg', '45kg', '45kg'] }
+                { id: 'gx1', name: 'Bench Press', notes: 'Bench cue', setCount: 1, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg'] },
+                { id: 'gx2', name: 'Row Machine', notes: 'Row cue', setCount: 3, targetReps: 10, restTimeSeconds: 75, setTargets: ['45kg', '45kg', '45kg'] }
             ]));
             localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
                 { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1', 'gx2'] }
@@ -325,20 +324,34 @@ test.describe('Gym Tracker Requirements', () => {
 
         await page.getByRole('button', { name: 'Complete Set' }).click();
         await expect(page.getByText('Up Next')).toBeVisible();
+        // Exact match: the nav pill above also reads "Row Machine", just with its weight appended.
+        await expect(page.getByText('Row Machine', { exact: true })).toBeVisible();
 
-        // Still resting after Bench Press set 1, so the note being edited is Bench Press's.
+        // Up Next is now Row Machine, so its note is the one on offer — not the finished Bench Press.
+        await expect(page.getByText('Bench cue')).not.toBeVisible();
         await page.getByRole('button', { name: 'Edit note' }).click();
-        await page.getByLabel('Exercise note').fill('Slower on the way down');
+        await page.getByLabel('Exercise note').fill('Squeeze at the top');
         await page.getByRole('button', { name: 'Done' }).click();
 
-        await expect(page.getByText('Slower on the way down')).toBeVisible();
-        await expect(page.getByText('Old cue')).not.toBeVisible();
+        await expect(page.getByText('Squeeze at the top')).toBeVisible();
+        await expect(page.getByText('Row cue')).not.toBeVisible();
 
         // The countdown must not have been restarted or skipped by the edit.
         await expect(page.getByRole('button', { name: 'Skip Rest' })).toBeVisible();
     });
 
-    test.fixme('US-GYM-19: Clearing the text removes the note', async ({ page }) => {
+    test('US-GYM-19: Tapping away from the field saves the note rather than discarding it', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await page.getByRole('button', { name: 'Add note' }).click();
+        await page.getByLabel('Exercise note').fill('Typed then tapped away');
+        // A phone user dismisses the keyboard by tapping elsewhere; that must not lose the note.
+        await page.getByLabel('Exercise note').blur();
+
+        await expect(page.getByText('Typed then tapped away')).toBeVisible();
+    });
+
+    test('US-GYM-19: Clearing the text removes the note', async ({ page }) => {
         await page.addInitScript(() => {
             localStorage.setItem('E2E_TEST_USER', 'true');
             localStorage.setItem('E2E_TEST_MODE', 'true');

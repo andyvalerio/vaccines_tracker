@@ -3,6 +3,7 @@ import { StorageService } from '../../services/storageService';
 import { useWorkoutSession } from '../../hooks/useWorkoutSession';
 import { ActiveWorkout as ActiveWorkoutState, GymDay, GymExercise, WorkoutHistorySet } from '../../types';
 import { NotificationService } from '../../services/notificationService';
+import ExerciseNoteField from './ExerciseNoteField';
 
 interface ActiveWorkoutProps {
     accountId: string;
@@ -208,6 +209,23 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             await StorageService.updateGymExercise(accountId, updated);
         } catch (err) {
             console.error('Failed to update exercise globally', err);
+        }
+    };
+
+    // Notes live on the exercise, so an edit made mid-workout is saved back to the library.
+    // Unlike the target field this persists every change, including clearing the note.
+    const handleNoteSave = async (exerciseId: string, note: string) => {
+        const previous = safeArray(exercises).find(exercise => exercise.id === exerciseId);
+        if (!previous || (previous.notes || '') === note) return;
+
+        const updated = { ...previous, notes: note || undefined };
+        setExercises(current => current.map(exercise => exercise.id === exerciseId ? updated : exercise));
+
+        try {
+            await StorageService.updateGymExercise(accountId, updated);
+        } catch (err) {
+            console.error('Failed to save exercise note', err);
+            setExercises(current => current.map(exercise => exercise.id === exerciseId ? previous : exercise));
         }
     };
 
@@ -514,11 +532,12 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                                             </span>
                                         )}
                                     </div>
-                                    {currentExercise.notes && (
-                                        <div className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl p-2">
-                                            {currentExercise.notes}
-                                        </div>
-                                    )}
+                                    <ExerciseNoteField
+                                        key={currentExercise.id}
+                                        note={currentExercise.notes}
+                                        onSave={note => handleNoteSave(currentExercise.id, note)}
+                                        compact
+                                    />
                                 </>
                             ) : (
                                 <div className="text-lg font-bold text-slate-700">Last set — almost there!</div>
@@ -620,11 +639,11 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                                     </div>
                                 </div>
 
-                                {currentExercise.notes && (
-                                    <div className="w-full p-3 bg-amber-50 border border-amber-100 rounded-xl text-amber-800 text-sm font-medium">
-                                        {currentExercise.notes}
-                                    </div>
-                                )}
+                                <ExerciseNoteField
+                                    key={currentExercise.id}
+                                    note={currentExercise.notes}
+                                    onSave={note => handleNoteSave(currentExercise.id, note)}
+                                />
 
                                 <button
                                     onClick={handleCompleteSet}

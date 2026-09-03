@@ -138,8 +138,9 @@
 
 **Acceptance criteria**
 - The note can be edited from the set screen and from the rest screen.
-- On the rest screen the note belongs to the exercise whose set was just completed, not the one coming up next.
+- The note always belongs to the exercise currently on screen — during rest, the one shown under "Up Next".
 - An exercise with no note yet still offers a way to add one.
+- The editor is touch-first: saving happens on Done or when the field loses focus, so tapping away to dismiss the keyboard never discards what was typed. There is no keyboard-shortcut way to cancel.
 - Saving updates the exercise in the library, so the change is visible in the routine editor and in later sessions.
 - Clearing the text removes the note.
 - Editing never pauses, restarts, or skips the rest countdown.
