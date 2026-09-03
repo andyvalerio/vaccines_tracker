@@ -125,3 +125,21 @@
 **As a** user
 **I want to** review a table of the extracted data and select/unselect specific records before confirming the import
 **So that** I have full control over what is added to my health tracker.
+
+## Gym Tracker
+
+> Requirements US-GYM-01 through US-GYM-18 are currently defined only by `tests/gym.spec.ts`
+> and have not yet been written up here.
+
+### [US-GYM-19] Edit Exercise Notes During a Workout
+**As a** user
+**I want to** add, change, or clear an exercise's notes while I am training
+**So that** I can capture a cue at the moment I notice it and have it waiting for me next time.
+
+**Acceptance criteria**
+- The note can be edited from the set screen and from the rest screen.
+- On the rest screen the note belongs to the exercise whose set was just completed, not the one coming up next.
+- An exercise with no note yet still offers a way to add one.
+- Saving updates the exercise in the library, so the change is visible in the routine editor and in later sessions.
+- Clearing the text removes the note.
+- Editing never pauses, restarts, or skips the rest countdown.

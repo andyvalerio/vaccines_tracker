@@ -282,6 +282,87 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(plankRow).not.toContainText('mins');
     });
 
+    // US-GYM-19 — editing exercise notes mid-session.
+    // These encode the agreed contract for a feature that is not built yet, so they are marked
+    // fixme. Change `test.fixme` to `test` in the same commit that lands the note editor.
+
+    test.fixme('US-GYM-19: A note added during a set is saved onto the exercise itself', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        // Bench Press has no note yet, so the field offers to add one.
+        await page.getByRole('button', { name: 'Add note' }).click();
+        await page.getByLabel('Exercise note').fill('Elbows tucked, pause on chest');
+        await page.getByRole('button', { name: 'Done' }).click();
+
+        await expect(page.getByText('Elbows tucked, pause on chest')).toBeVisible();
+
+        // The note lives on the exercise, so the library shows it too.
+        await page.evaluate(() => window.history.back());
+        await page.getByRole('button', { name: 'Routines' }).click();
+        await page.getByRole('button', { name: 'Exercises' }).click();
+        await page.getByRole('button', { name: 'Edit' }).first().click();
+
+        await expect(page.getByPlaceholder('e.g. Keep elbows tucked'))
+            .toHaveValue('Elbows tucked, pause on chest');
+    });
+
+    test.fixme('US-GYM-19: The rest screen edits the note of the exercise just completed', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('E2E_TEST_USER', 'true');
+            localStorage.setItem('E2E_TEST_MODE', 'true');
+            localStorage.removeItem('health_tracker_active_workout');
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', notes: 'Old cue', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'] },
+                { id: 'gx2', name: 'Row Machine', setCount: 3, targetReps: 10, restTimeSeconds: 75, setTargets: ['45kg', '45kg', '45kg'] }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1', 'gx2'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await expect(page.getByText('Up Next')).toBeVisible();
+
+        // Still resting after Bench Press set 1, so the note being edited is Bench Press's.
+        await page.getByRole('button', { name: 'Edit note' }).click();
+        await page.getByLabel('Exercise note').fill('Slower on the way down');
+        await page.getByRole('button', { name: 'Done' }).click();
+
+        await expect(page.getByText('Slower on the way down')).toBeVisible();
+        await expect(page.getByText('Old cue')).not.toBeVisible();
+
+        // The countdown must not have been restarted or skipped by the edit.
+        await expect(page.getByRole('button', { name: 'Skip Rest' })).toBeVisible();
+    });
+
+    test.fixme('US-GYM-19: Clearing the text removes the note', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('E2E_TEST_USER', 'true');
+            localStorage.setItem('E2E_TEST_MODE', 'true');
+            localStorage.removeItem('health_tracker_active_workout');
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', notes: 'Old cue', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'] }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await page.getByRole('button', { name: 'Edit note' }).click();
+        await page.getByLabel('Exercise note').fill('');
+        await page.getByRole('button', { name: 'Done' }).click();
+
+        await expect(page.getByText('Old cue')).not.toBeVisible();
+        // With no note left, the field goes back to offering to add one.
+        await expect(page.getByRole('button', { name: 'Add note' })).toBeVisible();
+    });
+
     test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
         const pageErrors: string[] = [];
         page.on('pageerror', error => {
