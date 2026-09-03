@@ -1,10 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.executeGymRestTimer = exports.scheduleGymRestTimer = void 0;
+exports.executeGymRestTimer = exports.cancelGymRestTimer = exports.scheduleGymRestTimer = void 0;
 const https_1 = require("firebase-functions/v2/https");
 const tasks_1 = require("firebase-functions/v2/tasks");
 const messaging_1 = require("firebase-admin/messaging");
 const tasks_2 = require("@google-cloud/tasks");
+const PROJECT_ID = "vaccine-tracker-pupicci";
+const REGION = "europe-west1";
+const QUEUE_NAME = "executeGymRestTimer";
+const FUNCTION_URL = `https://${REGION}-${PROJECT_ID}.cloudfunctions.net/executeGymRestTimer`;
+const TASK_NAME_PREFIX = `projects/${PROJECT_ID}/locations/${REGION}/queues/${QUEUE_NAME}/tasks/`;
 exports.scheduleGymRestTimer = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
     if (!request.auth) {
         throw new https_1.HttpsError('unauthenticated', 'The user must be authenticated.');
@@ -16,10 +21,6 @@ exports.scheduleGymRestTimer = (0, https_1.onCall)({ region: "europe-west1" }, a
     const scheduleDelay = restTimeSeconds || 60;
     // Calculate delivery time
     const scheduleTime = new Date(Date.now() + scheduleDelay * 1000);
-    const PROJECT_ID = "vaccine-tracker-pupicci";
-    const REGION = "europe-west1";
-    const QUEUE_NAME = "executeGymRestTimer";
-    const FUNCTION_URL = `https://${REGION}-${PROJECT_ID}.cloudfunctions.net/executeGymRestTimer`;
     const tasksClient = new tasks_2.CloudTasksClient();
     const parent = tasksClient.queuePath(PROJECT_ID, REGION, QUEUE_NAME);
     const task = {
@@ -36,8 +37,38 @@ exports.scheduleGymRestTimer = (0, https_1.onCall)({ region: "europe-west1" }, a
             seconds: Math.floor(scheduleTime.getTime() / 1000),
         },
     };
-    await tasksClient.createTask({ parent, task });
-    return { success: true, message: `Scheduled notification for ${scheduleTime.toISOString()}` };
+    const [created] = await tasksClient.createTask({ parent, task });
+    // The caller keeps this name so it can cancel the push if the rest ends early.
+    return {
+        success: true,
+        taskName: created.name || null,
+        message: `Scheduled notification for ${scheduleTime.toISOString()}`
+    };
+});
+exports.cancelGymRestTimer = (0, https_1.onCall)({ region: "europe-west1" }, async (request) => {
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'The user must be authenticated.');
+    }
+    const { taskName } = request.data;
+    if (!taskName || typeof taskName !== "string") {
+        throw new https_1.HttpsError('invalid-argument', 'Task name is required');
+    }
+    // Only tasks this app queued in its own rest-timer queue may be deleted.
+    if (!taskName.startsWith(TASK_NAME_PREFIX)) {
+        throw new https_1.HttpsError('permission-denied', 'That task cannot be cancelled');
+    }
+    const tasksClient = new tasks_2.CloudTasksClient();
+    try {
+        await tasksClient.deleteTask({ name: taskName });
+    }
+    catch (error) {
+        // NOT_FOUND (5) means the push already fired or was already cancelled — nothing left to do.
+        if (error?.code !== 5) {
+            console.error("Failed to cancel rest timer task", error);
+            throw new https_1.HttpsError('internal', 'Failed to cancel the rest timer');
+        }
+    }
+    return { success: true };
 });
 exports.executeGymRestTimer = (0, tasks_1.onTaskDispatched)({
     retryConfig: { maxAttempts: 3 },

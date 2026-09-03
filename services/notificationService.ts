@@ -45,13 +45,31 @@ export const NotificationService = {
     }
   },
 
-  scheduleRestNotification: async (deviceToken: string, restTimeSeconds: number): Promise<void> => {
+  // Returns the queued task's name so the push can be cancelled if the rest ends early.
+  scheduleRestNotification: async (deviceToken: string, restTimeSeconds: number): Promise<string | null> => {
     if (!deviceToken || restTimeSeconds <= 0) {
+      return null;
+    }
+
+    const scheduleGymRestTimer = httpsCallable<
+      { deviceToken: string; restTimeSeconds: number },
+      { success: boolean; taskName: string | null }
+    >(functions, 'scheduleGymRestTimer');
+
+    const result = await scheduleGymRestTimer({ deviceToken, restTimeSeconds });
+    return result.data?.taskName || null;
+  },
+
+  cancelRestNotification: async (taskName: string): Promise<void> => {
+    if (!taskName) {
       return;
     }
 
-    const scheduleGymRestTimer = httpsCallable(functions, 'scheduleGymRestTimer');
-    await scheduleGymRestTimer({ deviceToken, restTimeSeconds });
+    const cancelGymRestTimer = httpsCallable<{ taskName: string }, { success: boolean }>(
+      functions,
+      'cancelGymRestTimer'
+    );
+    await cancelGymRestTimer({ taskName });
   },
 
   playForegroundTimerComplete: async (): Promise<void> => {

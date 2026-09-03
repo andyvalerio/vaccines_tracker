@@ -258,6 +258,30 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByText('Open Progress')).not.toBeVisible();
     });
 
+    test('US-GYM-18: Time-based sets are saved in seconds, not mislabelled as minutes', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        // Plank is the only time-based exercise: 2 sets targeting "1mins" each.
+        await page.getByRole('button', { name: /Plank/ }).click();
+        await expect(page.getByText('Exercise 3 of 3')).toBeVisible();
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+        await page.getByRole('button', { name: 'Complete Set' }).click(); // Plank fully done
+
+        // Save with the other two exercises untouched, so the session holds only the Plank summary.
+        await page.getByRole('button', { name: 'Save & Complete' }).click();
+        await expect(page.getByText('Workout History')).toBeVisible();
+
+        await page.locator('button').filter({ hasText: '✓' }).first().click();
+
+        // Two sets targeting one minute each = 120 seconds. The old code stored 2 and called it "mins",
+        // or stored the measured seconds and still called them "mins".
+        const plankRow = page.getByRole('button').filter({ hasText: 'Plank' });
+        await expect(plankRow).toContainText('120 s');
+        await expect(plankRow).not.toContainText('mins');
+    });
+
     test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
         const pageErrors: string[] = [];
         page.on('pageerror', error => {

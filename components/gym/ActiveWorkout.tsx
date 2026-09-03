@@ -20,12 +20,17 @@ const isExerciseComplete = (workout: ActiveWorkoutState, exercise: GymExercise) 
 const getFirstUncompletedExerciseIndex = (routineExercises: GymExercise[], workout: ActiveWorkoutState) =>
     routineExercises.findIndex(exercise => !isExerciseComplete(workout, exercise));
 
+// Duration volume is always stored in seconds, because that is what a set is actually measured in.
+const DURATION_UNIT = 's';
+
 const parseTarget = (target: string) => {
     const value = parseFloat(target) || 0;
     const unitMatch = target.match(/[a-zA-Z]+/);
     const unit = unitMatch ? unitMatch[0].toLowerCase() : 'kg';
     const metric = unit.includes('min') ? 'duration' as const : 'weight' as const;
-    return { value, unit, metric };
+    // Targets are written in minutes but sets are timed in seconds; normalise so the two are comparable.
+    const targetSeconds = metric === 'duration' ? Math.round(value * 60) : 0;
+    return { value, unit, metric, targetSeconds };
 };
 
 const buildExerciseSummary = (
@@ -36,12 +41,13 @@ const buildExerciseSummary = (
     const completedTargets = safeArray(exercise.setTargets).slice(0, completedSets);
     const parsedTargets = completedTargets.map(parseTarget);
     const metric = parsedTargets.some(t => t.metric === 'duration') ? 'duration' as const : 'weight' as const;
-    const unit = parsedTargets[0]?.unit || 'kg';
+    const unit = metric === 'duration' ? DURATION_UNIT : (parsedTargets[0]?.unit || 'kg');
 
     let totalVolume: number;
     if (metric === 'duration') {
+        // Both sides are seconds here: the target converted from minutes, and the measured set time.
         totalVolume = parsedTargets.reduce((sum, t, i) =>
-            sum + Math.max(t.value, actualDurations?.[i] ?? 0), 0);
+            sum + Math.max(t.targetSeconds, actualDurations?.[i] ?? 0), 0);
     } else {
         totalVolume = parsedTargets.reduce((sum, t) => sum + t.value * exercise.targetReps, 0);
     }
@@ -105,6 +111,13 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         }
     }, [activeWorkout, routineExercises, setActiveWorkout]);
 
+    // Drops the queued "rest over" push so it cannot arrive after the rest has already ended.
+    const cancelPendingRestPush = (taskName?: string) => {
+        if (!taskName) return;
+        NotificationService.cancelRestNotification(taskName)
+            .catch(err => console.warn('Failed to cancel rest notification', err));
+    };
+
     // Rest timer countdown
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | undefined;
@@ -115,6 +128,11 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                 if (left <= 0) {
                     const allDone = getFirstUncompletedExerciseIndex(routineExercises, activeWorkout) === -1;
                     const now = Date.now();
+                    // On screen the local chime already covers this, so the push would only be a duplicate.
+                    // Backgrounded, the push is the whole point — leave it queued.
+                    if (document.visibilityState === 'visible') {
+                        cancelPendingRestPush(activeWorkout.pendingRestTaskName);
+                    }
                     setActiveWorkout({
                         ...activeWorkout,
                         status: allDone ? 'completed' : 'active',
@@ -122,6 +140,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                         restEndsAt: undefined,
                         completedAt: allDone ? now : activeWorkout.completedAt,
                         setStartedAt: allDone ? activeWorkout.setStartedAt : now,
+                        pendingRestTaskName: undefined,
                     });
                 }
             }, 1000);
@@ -230,6 +249,9 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             };
         }
 
+        // A push queued for an earlier rest is stale the moment another set is logged.
+        cancelPendingRestPush(activeWorkout.pendingRestTaskName);
+
         const completedSetsByExercise = {
             ...(activeWorkout.completedSetsByExercise || {}),
             [currentExercise.id]: setsCompleted + 1,
@@ -239,6 +261,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             completedSetsByExercise,
             lastCompletedExerciseId: currentExercise.id,
             actualSetDurations: updatedActualDurations,
+            pendingRestTaskName: undefined,
         };
 
         const firstRemainingIdx = getFirstUncompletedExerciseIndex(routineExercises, updatedWorkout);
@@ -259,12 +282,25 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             return;
         }
 
-        setActiveWorkout({ ...updatedWorkout, currentExerciseIndex: nextIndex, status: 'resting', restEndsAt: now + currentExercise.restTimeSeconds * 1000 });
+        const restEndsAt = now + currentExercise.restTimeSeconds * 1000;
+        setActiveWorkout({ ...updatedWorkout, currentExerciseIndex: nextIndex, status: 'resting', restEndsAt });
         setTimeLeft(currentExercise.restTimeSeconds);
 
         try {
             const token = messagingToken || await requestNotificationToken();
-            if (token) await NotificationService.scheduleRestNotification(token, currentExercise.restTimeSeconds);
+            if (!token) return;
+
+            const taskName = await NotificationService.scheduleRestNotification(token, currentExercise.restTimeSeconds);
+            if (!taskName) return;
+
+            setActiveWorkout(previous => {
+                // This rest may already have ended while the task was being queued — drop the push instead of storing it.
+                if (!previous || previous.status !== 'resting' || previous.restEndsAt !== restEndsAt) {
+                    cancelPendingRestPush(taskName);
+                    return previous;
+                }
+                return { ...previous, pendingRestTaskName: taskName };
+            });
         } catch (err) {
             console.warn('Failed to schedule rest notification', err);
         }
@@ -274,6 +310,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         if (!activeWorkout) return;
         const allDone = firstUncompletedIndex === -1;
         const now = Date.now();
+        cancelPendingRestPush(activeWorkout.pendingRestTaskName);
         setActiveWorkout({
             ...activeWorkout,
             // currentExerciseIndex is already correct (set when entering rest)
@@ -281,11 +318,13 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             restEndsAt: undefined,
             completedAt: allDone ? now : activeWorkout.completedAt,
             setStartedAt: allDone ? activeWorkout.setStartedAt : now,
+            pendingRestTaskName: undefined,
         });
     };
 
     const handleSaveAndCompleteSession = async () => {
         if (!activeWorkout || !day) return;
+        cancelPendingRestPush(activeWorkout.pendingRestTaskName);
         try {
             const exercisesCompleted = routineExercises
                 .map(exercise => {
@@ -311,7 +350,9 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
     };
 
     const abandonSession = () => {
-        if (confirm('Abandon this session? Progress will be lost.')) onFinish();
+        if (!confirm('Abandon this session? Progress will be lost.')) return;
+        cancelPendingRestPush(activeWorkout?.pendingRestTaskName);
+        onFinish();
     };
 
     if (loading || !activeWorkout) return <div className="animate-pulse p-4 text-slate-500">Loading workout...</div>;

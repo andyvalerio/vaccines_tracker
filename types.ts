@@ -86,6 +86,7 @@ export interface ActiveWorkout {
   lastCompletedExerciseId?: string;
   setStartedAt?: number; // when the current set began (for time-based duration tracking)
   actualSetDurations?: Record<string, number[]>; // exerciseId -> elapsed seconds per completed set
+  pendingRestTaskName?: string; // Cloud Tasks name of the queued "rest over" push, so it can be cancelled
 }
 
 export interface WorkoutHistorySet {
