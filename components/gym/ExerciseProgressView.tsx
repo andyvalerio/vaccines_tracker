@@ -72,7 +72,8 @@ export default function ExerciseProgressView({ accountId, exerciseName, onBack }
                     </div>
                 ) : (
                     <>
-                        <div className="h-80">
+                        {/* Height set inline too — see MarkerGraph: a zero-height parent renders no chart. */}
+                        <div className="h-80" style={{ height: 320 }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

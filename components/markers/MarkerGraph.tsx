@@ -153,7 +153,12 @@ const MarkerGraph: React.FC<Props> = ({ markers, records }) => {
                 </button>
             </div>
 
-            <div className={`w-full ${isFullscreen ? 'flex-1 min-h-[400px]' : 'h-[300px]'}`}>
+            {/* The height is set inline as well as by class: Recharts renders nothing in a zero-height
+                parent, and Tailwind is loaded from a CDN that is unavailable offline. */}
+            <div
+                className={`w-full ${isFullscreen ? 'flex-1 min-h-[400px]' : 'h-[300px]'}`}
+                style={isFullscreen ? { minHeight: 400 } : { height: 300 }}
+            >
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />

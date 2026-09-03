@@ -90,8 +90,11 @@ test.describe('Blood Markers Requirements', () => {
     test('US-MARKER-03 & 04: Visualize Timeline Graph and Reference', async ({ page }) => {
         // Graph should be visible
         await expect(page.getByText('Timeline Analysis')).toBeVisible();
-        // Since we have mock data, the line graph svg should be painted with paths
         await expect(page.locator('.recharts-responsive-container')).toBeVisible();
+        // A sized container is not enough — the mock data must actually be plotted.
+        // One marker (LDL Cholesterol) means one line, drawn through its two records.
+        await expect(page.locator('.recharts-line-curve')).toHaveCount(1);
+        await expect(page.locator('.recharts-dot')).toHaveCount(2);
     });
 
     test('US-MARKER-05 & 06: Import Flow', async ({ page }) => {
