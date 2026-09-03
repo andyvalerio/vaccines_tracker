@@ -67,6 +67,7 @@ export interface GymExercise {
   targetReps: number;
   restTimeSeconds: number;
   setTargets: string[]; // e.g. ["15kg", "20kg", "25kg"]
+  lastActualReps?: Record<string, number>; // set index (as string) -> reps actually performed last time
 }
 
 export interface GymDay {
@@ -86,6 +87,8 @@ export interface ActiveWorkout {
   lastCompletedExerciseId?: string;
   setStartedAt?: number; // when the current set began (for time-based duration tracking)
   actualSetDurations?: Record<string, number[]>; // exerciseId -> elapsed seconds per completed set
+  actualSetReps?: Record<string, number[]>; // exerciseId -> reps performed per completed set, this session
+  draftReps?: Record<string, number>; // exerciseId -> reps shown for the not-yet-completed set, survives navigating away and back
   pendingRestTaskName?: string; // Cloud Tasks name of the queued "rest over" push, so it can be cancelled
 }
 
@@ -99,6 +102,7 @@ export interface WorkoutHistorySet {
   unit: string;
   metric: 'weight' | 'duration';
   setTargets: string[];
+  actualReps: number[]; // reps actually performed, index-aligned with setTargets
 }
 
 export interface WorkoutSession {

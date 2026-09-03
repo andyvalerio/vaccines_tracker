@@ -144,3 +144,27 @@
 - Saving updates the exercise in the library, so the change is visible in the routine editor and in later sessions.
 - Clearing the text removes the note.
 - Editing never pauses, restarts, or skips the rest countdown.
+
+### [US-GYM-20] Edit and Recall Reps Per Set
+**As a** user
+**I want to** record the actual number of reps I complete on each individual set, and have each set
+pre-filled with what I actually did on that same set last time
+**So that** the app reflects real performance rather than an assumed flat target, and I don't have to
+remember or re-enter my own progress from the previous session.
+
+**Acceptance criteria**
+- The Reps tile on the active-set screen is a +/- stepper, not a static display, with no keyboard entry.
+- Completing a set permanently records the reps shown at that moment as that set's actual performance,
+  saved to the exercise in the database immediately — not just locally, and not only at the end of the
+  exercise or session.
+- The next time this exercise is started, each set's reps default to the actual reps performed on that
+  same set index last time — set 1 recalls set 1, set 2 recalls set 2, etc.
+- This recalled value takes priority over the exercise's configured target reps, even if the configured
+  target has changed since.
+- A set index with no prior recorded performance (new exercise, or reconfigured with more sets than were
+  previously recorded) falls back to the exercise's configured target reps.
+- If a session is abandoned partway through an exercise, the sets that were actually completed keep their
+  recorded reps for next time; only the unfinished sets have no new data.
+- Saved workout history (History and Progress views) reflects actual reps performed, not the configured
+  target, for total reps and total volume going forward. Sessions saved before this feature keep their
+  previously saved numbers unchanged.

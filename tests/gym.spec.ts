@@ -376,6 +376,174 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByRole('button', { name: 'Add note' })).toBeVisible();
     });
 
+    // US-GYM-20 — editing reps per set, and recalling what was actually performed last time.
+
+    test('US-GYM-20: Reps tile is a stepper, not a static display', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByRole('button', { name: 'Increase reps' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Decrease reps' })).toBeVisible();
+
+        // Bench Press has no recorded history yet, so it opens on the configured target, 8.
+        const repsTile = page.getByRole('button', { name: 'Increase reps' }).locator('../..');
+        await expect(repsTile).toContainText('8');
+    });
+
+    test('US-GYM-20: Completing a set records the reps actually shown, not the configured target', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const increase = page.getByRole('button', { name: 'Increase reps' });
+        const repsTile = increase.locator('../..');
+        await expect(repsTile).toContainText('8');
+        await increase.click();
+        await increase.click();
+        await expect(repsTile).toContainText('10');
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        // Save with just this one set done, and check what got recorded.
+        await page.getByRole('button', { name: 'Save & complete session' }).click();
+
+        await expect(page.getByText('Workout History')).toBeVisible();
+        await page.locator('button').filter({ hasText: '✓' }).first().click();
+        // 1 set at 10 reps — not the configured target of 8.
+        await expect(page.getByText('1 sets • 10 reps')).toBeVisible();
+    });
+
+    test('US-GYM-20: Next time this exercise is started, each set recalls what was actually performed on that same set last time', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('E2E_TEST_USER', 'true');
+            localStorage.setItem('E2E_TEST_MODE', 'true');
+            localStorage.removeItem('health_tracker_active_workout');
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { 0: 10, 1: 9, 2: 8 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const repsTile = page.getByRole('button', { name: 'Increase reps' }).locator('../..');
+        await expect(repsTile).toContainText('10'); // set 1 recalls 10, not the configured target of 8
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+        await expect(repsTile).toContainText('9'); // set 2 recalls 9
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+        await expect(repsTile).toContainText('8'); // set 3 recalls 8
+    });
+
+    test('US-GYM-20: Recalled reps take priority even when the configured target has since changed', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('E2E_TEST_USER', 'true');
+            localStorage.setItem('E2E_TEST_MODE', 'true');
+            localStorage.removeItem('health_tracker_active_workout');
+            // Recorded at 10/9/8; targetReps has since been changed to 12.
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 12, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { 0: 10, 1: 9, 2: 8 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const repsTile = page.getByRole('button', { name: 'Increase reps' }).locator('../..');
+        await expect(repsTile).toContainText('10');
+        await expect(repsTile).not.toContainText('12');
+    });
+
+    test('US-GYM-20: An exercise reconfigured with more sets still recalls the sets that have history and falls back for new ones', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('E2E_TEST_USER', 'true');
+            localStorage.setItem('E2E_TEST_MODE', 'true');
+            localStorage.removeItem('health_tracker_active_workout');
+            // Previously done with 3 sets (10/9/8); reconfigured to 5 sets targeting 6 reps.
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 5, targetReps: 6, restTimeSeconds: 0, setTargets: ['60kg', '60kg', '60kg', '60kg', '60kg'], lastActualReps: { 0: 10, 1: 9, 2: 8 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const repsTile = page.getByRole('button', { name: 'Increase reps' }).locator('../..');
+        await expect(repsTile).toContainText('10'); // set 1: recalled
+        await page.getByRole('button', { name: 'Complete Set' }).click(); // no rest configured, stays active
+        await expect(repsTile).toContainText('9'); // set 2: recalled
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await expect(repsTile).toContainText('8'); // set 3: recalled
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await expect(repsTile).toContainText('6'); // set 4: no history for this index, falls back to the target
+    });
+
+    test('US-GYM-20: Abandoning a session still remembers the reps from sets that were completed', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const increase = page.getByRole('button', { name: 'Increase reps' });
+        await increase.click();
+        await increase.click(); // Bench Press set 1: 8 -> 10
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+
+        page.on('dialog', dialog => dialog.accept());
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+        await page.getByRole('button', { name: 'Abandon' }).click();
+
+        await expect(page.getByText('Workout History')).toBeVisible();
+        await page.getByRole('button', { name: /Back/ }).first().click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        // A fresh workout for the same routine — Bench Press set 1 recalls 10, not the abandoned session's loss.
+        const repsTile = page.getByRole('button', { name: 'Increase reps' }).locator('../..');
+        await expect(repsTile).toContainText('10');
+    });
+
+    test('US-GYM-20: Up Next panel during rest shows the same recalled reps as the upcoming set will open with', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('E2E_TEST_USER', 'true');
+            localStorage.setItem('E2E_TEST_MODE', 'true');
+            localStorage.removeItem('health_tracker_active_workout');
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { 1: 9 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        // Set 1 has no recorded history (defaults to the target, 8); set 2 does (9).
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await expect(page.getByText('Up Next')).toBeVisible();
+        await expect(page.getByText(/9 reps/)).toBeVisible();
+    });
+
+    test('US-GYM-20: An unfinished edit to reps is preserved when navigating to another exercise and back', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const increase = page.getByRole('button', { name: 'Increase reps' });
+        const repsTile = increase.locator('../..');
+        await increase.click();
+        await increase.click();
+        await expect(repsTile).toContainText('10');
+
+        await page.getByRole('button', { name: /Row Machine/ }).click();
+        await page.getByRole('button', { name: /Bench Press/ }).click();
+
+        await expect(repsTile).toContainText('10');
+    });
+
     test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
         const pageErrors: string[] = [];
         page.on('pageerror', error => {

@@ -10,6 +10,18 @@ const normalizeGymExercise = (exercise?: Partial<GymExercise> | null): GymExerci
   const rawTargets = Array.isArray(safeExercise.setTargets) ? safeExercise.setTargets : [];
   const setTargets = Array.from({ length: setCount }, (_, index) => rawTargets[index] || '');
 
+  // Keyed by set index rather than a plain array: Firebase Realtime Database rejects `undefined`
+  // and doesn't reliably round-trip gaps in an array, so a set with no recorded history yet must
+  // be an absent key, not a hole.
+  const rawLastActualReps = safeExercise.lastActualReps && typeof safeExercise.lastActualReps === 'object'
+    ? safeExercise.lastActualReps
+    : {};
+  const lastActualReps: Record<string, number> = {};
+  for (let index = 0; index < setCount; index++) {
+    const value = Number((rawLastActualReps as Record<string, unknown>)[index]);
+    if (Number.isFinite(value)) lastActualReps[index] = value;
+  }
+
   return {
     id: safeExercise.id || '',
     name: safeExercise.name || 'Exercise',
@@ -18,6 +30,7 @@ const normalizeGymExercise = (exercise?: Partial<GymExercise> | null): GymExerci
     targetReps: Math.max(1, Number(safeExercise.targetReps) || 1),
     restTimeSeconds: Math.max(0, Number(safeExercise.restTimeSeconds) || 0),
     setTargets,
+    lastActualReps: Object.keys(lastActualReps).length ? lastActualReps : undefined,
   };
 };
 

@@ -4,6 +4,7 @@ import { useWorkoutSession } from '../../hooks/useWorkoutSession';
 import { ActiveWorkout as ActiveWorkoutState, GymDay, GymExercise, WorkoutHistorySet } from '../../types';
 import { NotificationService } from '../../services/notificationService';
 import ExerciseNoteField from './ExerciseNoteField';
+import ExerciseRepsStepper from './ExerciseRepsStepper';
 
 interface ActiveWorkoutProps {
     accountId: string;
@@ -21,6 +22,12 @@ const isExerciseComplete = (workout: ActiveWorkoutState, exercise: GymExercise) 
 const getFirstUncompletedExerciseIndex = (routineExercises: GymExercise[], workout: ActiveWorkoutState) =>
     routineExercises.findIndex(exercise => !isExerciseComplete(workout, exercise));
 
+// Reps shown for a set not yet completed, most to least specific: an edit already made this
+// session for that exact set, what was actually performed on that same set index last time
+// (even if the exercise's configured target has since changed), or the configured target itself.
+const getDefaultReps = (workout: ActiveWorkoutState, exercise: GymExercise, setIndex: number) =>
+    workout.draftReps?.[exercise.id] ?? exercise.lastActualReps?.[setIndex] ?? exercise.targetReps;
+
 // Duration volume is always stored in seconds, because that is what a set is actually measured in.
 const DURATION_UNIT = 's';
 
@@ -37,9 +44,11 @@ const parseTarget = (target: string) => {
 const buildExerciseSummary = (
     exercise: GymExercise,
     completedSets: number,
-    actualDurations?: number[]
+    actualDurations?: number[],
+    actualReps?: number[]
 ): WorkoutHistorySet => {
     const completedTargets = safeArray(exercise.setTargets).slice(0, completedSets);
+    const completedReps = safeArray(actualReps).slice(0, completedSets);
     const parsedTargets = completedTargets.map(parseTarget);
     const metric = parsedTargets.some(t => t.metric === 'duration') ? 'duration' as const : 'weight' as const;
     const unit = metric === 'duration' ? DURATION_UNIT : (parsedTargets[0]?.unit || 'kg');
@@ -50,19 +59,27 @@ const buildExerciseSummary = (
         totalVolume = parsedTargets.reduce((sum, t, i) =>
             sum + Math.max(t.targetSeconds, actualDurations?.[i] ?? 0), 0);
     } else {
-        totalVolume = parsedTargets.reduce((sum, t) => sum + t.value * exercise.targetReps, 0);
+        // Actual reps performed, not the flat configured target — completedReps is captured at the
+        // moment each set finished, so it already resolved through the target/last-time fallback.
+        totalVolume = parsedTargets.reduce((sum, t, i) =>
+            sum + t.value * (completedReps[i] ?? exercise.targetReps), 0);
     }
+
+    const totalReps = completedReps.length
+        ? completedReps.reduce((sum, r) => sum + r, 0)
+        : completedSets * exercise.targetReps; // legacy fallback if actuals were somehow never recorded
 
     return {
         exerciseId: exercise.id,
         exerciseName: exercise.name,
         completedSets,
         targetReps: exercise.targetReps,
-        totalReps: completedSets * exercise.targetReps,
+        totalReps,
         totalVolume,
         unit,
         metric,
         setTargets: completedTargets,
+        actualReps: completedReps,
     };
 };
 
@@ -200,6 +217,17 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         setExercises(updatedExercises);
     };
 
+    // A stepper tap only needs to update the local, localStorage-persisted session draft — no
+    // network write happens until the set is actually completed (mirrors weight/duration, which
+    // also only writes to Firebase on a commit point, not on every keystroke/tap).
+    const handleRepsChange = (newReps: number) => {
+        if (!currentExercise || !activeWorkout) return;
+        setActiveWorkout({
+            ...activeWorkout,
+            draftReps: { ...(activeWorkout.draftReps || {}), [currentExercise.id]: newReps },
+        });
+    };
+
     const handleTargetBlur = async (oldTarget: string, newTarget: string) => {
         if (!currentExercise || oldTarget === newTarget) return;
         if ((parseFloat(newTarget) || 0) <= (parseFloat(oldTarget) || 0)) return;
@@ -267,6 +295,31 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             };
         }
 
+        // Whatever the stepper shows right now — an edit, last time's value, or the configured
+        // target if untouched — is what counts as this set's actual performance.
+        const performedReps = getDefaultReps(activeWorkout, currentExercise, currentTargetIdx);
+        const updatedActualReps = {
+            ...(activeWorkout.actualSetReps || {}),
+            [currentExercise.id]: [
+                ...(activeWorkout.actualSetReps?.[currentExercise.id] || []),
+                performedReps,
+            ],
+        };
+        const remainingDraftReps = { ...(activeWorkout.draftReps || {}) };
+        delete remainingDraftReps[currentExercise.id];
+
+        // Saved to the exercise in the database immediately, so it survives even if the rest of
+        // the session is later abandoned — always, not gated behind a "only if greater" rule.
+        const updatedExerciseRecord: GymExercise = {
+            ...currentExercise,
+            lastActualReps: { ...(currentExercise.lastActualReps || {}), [currentTargetIdx]: performedReps },
+        };
+        setExercises(prev => prev.map(e => e.id === currentExercise.id ? updatedExerciseRecord : e));
+        StorageService.updateGymExercise(accountId, updatedExerciseRecord).catch(err => {
+            console.error('Failed to save actual reps', err);
+            setExercises(prev => prev.map(e => e.id === currentExercise.id ? currentExercise : e));
+        });
+
         // A push queued for an earlier rest is stale the moment another set is logged.
         cancelPendingRestPush(activeWorkout.pendingRestTaskName);
 
@@ -279,6 +332,8 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             completedSetsByExercise,
             lastCompletedExerciseId: currentExercise.id,
             actualSetDurations: updatedActualDurations,
+            actualSetReps: updatedActualReps,
+            draftReps: remainingDraftReps,
             pendingRestTaskName: undefined,
         };
 
@@ -348,7 +403,12 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                 .map(exercise => {
                     const done = getCompletedSetCount(activeWorkout, exercise.id);
                     if (done === 0) return null;
-                    return buildExerciseSummary(exercise, done, activeWorkout.actualSetDurations?.[exercise.id]);
+                    return buildExerciseSummary(
+                        exercise,
+                        done,
+                        activeWorkout.actualSetDurations?.[exercise.id],
+                        activeWorkout.actualSetReps?.[exercise.id]
+                    );
                 })
                 .filter(Boolean) as WorkoutHistorySet[];
 
@@ -386,6 +446,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
     const currentSetTargetIndex = Math.min(currentSetsCompleted, currentExercise.setCount - 1);
     const currentSetTarget = safeArray(currentExercise.setTargets)[currentSetTargetIndex] || '';
     const parsedTarget = parseTarget(currentSetTarget);
+    const currentReps = getDefaultReps(activeWorkout, currentExercise, currentSetTargetIndex);
     const isResting = activeWorkout.status === 'resting';
     const isCompleted = activeWorkout.status === 'completed';
 
@@ -393,6 +454,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
     const upNextSetsCompleted = getCompletedSetCount(activeWorkout, currentExercise.id);
     const upNextTargetIdx = Math.min(upNextSetsCompleted, currentExercise.setCount - 1);
     const upNextWeight = safeArray(currentExercise.setTargets)[upNextTargetIdx] || '';
+    const upNextReps = getDefaultReps(activeWorkout, currentExercise, upNextTargetIdx);
 
     return (
         <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-4 sm:p-5 relative flex flex-col gap-3 min-h-[75dvh]">
@@ -524,7 +586,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                                     <div className="text-xl font-extrabold text-slate-900 leading-tight">{currentExercise.name}</div>
                                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                                         <span className="text-sm text-slate-500">
-                                            Set {upNextSetsCompleted + 1}/{currentExercise.setCount} · {currentExercise.targetReps} reps
+                                            Set {upNextSetsCompleted + 1}/{currentExercise.setCount} · {upNextReps} reps
                                         </span>
                                         {upNextWeight && (
                                             <span className="px-3 py-0.5 bg-blue-600 text-white text-sm font-extrabold rounded-full">
@@ -611,10 +673,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                                             {currentSetsCompleted + 1} <span className="text-sm text-slate-400 font-medium">/ {currentExercise.setCount}</span>
                                         </div>
                                     </div>
-                                    <div className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col items-center">
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Reps</div>
-                                        <div className="text-xl font-bold text-slate-800">{currentExercise.targetReps || '—'}</div>
-                                    </div>
+                                    <ExerciseRepsStepper value={currentReps} onChange={handleRepsChange} />
                                     <div className="flex-1 bg-white p-3 rounded-2xl border border-blue-200 shadow-sm shadow-blue-100">
                                         <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1 text-center">Target</div>
                                         <div className="flex items-center justify-center gap-1">
