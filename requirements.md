@@ -164,6 +164,10 @@
 
 **Acceptance criteria**
 - Completing a set starts a rest view that keeps context ("Up Next") and offers "Skip Rest".
+- The rest view also offers a way to correct the set that was just completed.
+- Giving that set back ends the rest, cancels its queued "rest over" notification, and returns to the
+  set so it can be performed again.
+- Correcting a set never pauses, restarts, or skips the rest countdown.
 - Completing every set reaches an explicit "Session Complete" state with a "Save Workout" action.
 
 ### [US-GYM-05] History Defaults to Monthly Calendar
@@ -329,6 +333,7 @@ as intentional rather than lost progress.
 - With no cycle configured, the chart renders exactly as before, with no cycle overlay or legend.
 - The overlay is derived from each session's own date, so past sessions are placed correctly even as
   the current week advances.
+### [US-GYM-19] Editable Exercise Notes During a Workout
 **As a** user
 **I want to** add, change, or clear an exercise's notes while I am training
 **So that** I can capture a cue at the moment I notice it and have it waiting for me next time.
@@ -365,6 +370,19 @@ remember or re-enter my own progress from the previous session.
 - Saved workout history (History and Progress views) reflects actual reps performed, not the configured
   target, for total reps and total volume going forward. Sessions saved before this feature keep their
   previously saved numbers unchanged.
+- A set that is already logged can be corrected without abandoning the session. Both its reps and its
+  weight are editable while training — from the set screen, from the rest screen, and from a finished
+  exercise or the Session Complete screen, right up until the workout is saved.
+- Correcting a set replaces what was recorded for it, so history totals and what the next session
+  recalls for that set both reflect the correction rather than the value entered by mistake.
+- Only the most recently completed set of an exercise can be given back ("not done"); earlier sets stay
+  editable in place. Giving a set back discards its recording, and the reps recalled for it revert to
+  what was recorded before this session.
+- A set not yet performed is listed for context but cannot be edited.
+- A timed set is measured by the timer rather than typed, so it can be given back but its recorded
+  duration is not hand-editable.
+- Correcting a set adds no permanent controls to the workout screens: it opens on demand from controls
+  that are already there, so the phone-sized set and rest views gain no new rows.
 
 ### [US-GYM-21] Training Cycle Awareness (Periodization)
 

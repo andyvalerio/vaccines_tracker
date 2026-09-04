@@ -97,6 +97,10 @@ export interface ActiveWorkout {
   actualSetDurations?: Record<string, number[]>; // exerciseId -> elapsed seconds per completed set
   actualSetReps?: Record<string, number[]>; // exerciseId -> reps performed per completed set, this session
   draftReps?: Record<string, number>; // exerciseId -> reps shown for the not-yet-completed set, survives navigating away and back
+  // exerciseId -> the exercise's lastActualReps as it stood before this session first wrote to it.
+  // Completing a set overwrites that recall value immediately, so un-completing the set needs the
+  // snapshot to put back what the previous session had recorded.
+  preSessionLastActualReps?: Record<string, Record<string, number>>;
   pendingRestTaskName?: string; // Cloud Tasks name of the queued "rest over" push, so it can be cancelled
 }
 
