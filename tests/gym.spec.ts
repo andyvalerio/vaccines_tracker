@@ -61,6 +61,18 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByRole('button', { name: 'Save Workout' })).toBeVisible();
     });
 
+    test('US-GYM-04: Giving back the set just completed ends the rest', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await expect(page.getByText('Up Next')).toBeVisible();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        await page.getByRole('button', { name: 'Mark set 1 not done' }).click();
+
+        await expect(page.getByText('Up Next')).not.toBeVisible();
+        await expect(page.getByRole('button', { name: 'Complete Set' })).toBeVisible();
+    });
+
     test('US-GYM-05: History defaults to monthly calendar view', async ({ page }) => {
         await page.getByRole('button', { name: 'History' }).click();
 
@@ -544,6 +556,184 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(repsTile).toContainText('10');
     });
 
+    test('US-GYM-20: The fix-a-set affordance appears only once a set has been completed', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const fix = page.getByRole('button', { name: 'Fix a logged set' });
+        await expect(fix).toBeDisabled();
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await expect(fix).toBeEnabled();
+        await expect(fix).toContainText('1 done \u00b7 fix');
+    });
+
+    test('US-GYM-20: Correcting the reps of a set already done changes what reaches saved history', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        // Bench Press has no history, so set 1 is logged at the configured target of 8.
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        const increase = page.getByRole('button', { name: 'Increase reps for set 1' });
+        await increase.click();
+        await increase.click();
+        await page.getByRole('button', { name: 'Done', exact: true }).click();
+
+        await page.getByRole('button', { name: 'Save & complete session' }).click();
+        await expect(page.getByText('Workout History')).toBeVisible();
+        await page.locator('button').filter({ hasText: '\u2713' }).first().click();
+
+        await expect(page.getByText('1 sets \u2022 10 reps')).toBeVisible();
+    });
+
+    test('US-GYM-20: Correcting the weight of a set already done changes the volume that is saved', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        const weight = page.getByRole('spinbutton', { name: 'Weight for set 1' });
+        await weight.fill('50');
+        await weight.blur();
+        await page.getByRole('button', { name: 'Done', exact: true }).click();
+
+        await page.getByRole('button', { name: 'Save & complete session' }).click();
+        await page.locator('button').filter({ hasText: '\u2713' }).first().click();
+
+        // 8 reps at the corrected 50kg, not the 60kg the set was logged at.
+        await expect(page.getByText('400 kg')).toBeVisible();
+    });
+
+    test('US-GYM-20: Marking the last completed set not done gives the set back', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+        await expect(page.getByText('1/8 sets \u00b7 13%')).toBeVisible();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        await page.getByRole('button', { name: 'Mark set 1 not done' }).click();
+
+        await expect(page.getByText('0/8 sets \u00b7 0%')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Fix a logged set' })).toBeDisabled();
+        await expect(page.getByRole('button', { name: 'Complete Set' })).toBeVisible();
+    });
+
+    test('US-GYM-20: A set can still be given back from Session Complete, reopening the session', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        for (let i = 0; i < 8; i++) {
+            const skip = page.getByRole('button', { name: 'Skip Rest' });
+            if (await skip.isVisible()) await skip.click();
+            const complete = page.getByRole('button', { name: 'Complete Set' });
+            if (await complete.isVisible()) await complete.click();
+        }
+        await expect(page.getByText('Session Complete')).toBeVisible();
+
+        await page.getByRole('button', { name: /^Fix a set in / }).click();
+        await page.getByRole('button', { name: /^Mark set \d+ not done$/ }).click();
+
+        await expect(page.getByText('Session Complete')).not.toBeVisible();
+        await expect(page.getByRole('button', { name: 'Complete Set' })).toBeVisible();
+    });
+
+    test('US-GYM-20: A corrected set is what the next session recalls for that set', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { 0: 10 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        // Set 1 opens on the recalled 10 and is logged at it.
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        const increase = page.getByRole('button', { name: 'Increase reps for set 1' });
+        await increase.click();
+        await increase.click();
+        await page.getByRole('button', { name: 'Done', exact: true }).click();
+
+        // Finish, then start again — set 1 must open on the correction, not the logged 10.
+        await page.getByRole('button', { name: 'Save & complete session' }).click();
+        await page.getByRole('button', { name: /Back/ }).first().click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const repsTile = page.getByRole('button', { name: 'Increase reps' }).locator('../..');
+        await expect(repsTile).toContainText('12');
+    });
+
+    test('US-GYM-20: Giving a set back reverts the reps recalled for it', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { 0: 10 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([
+                { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        const increase = page.getByRole('button', { name: 'Increase reps for set 1' });
+        await increase.click();
+        await increase.click();
+        await page.getByRole('button', { name: 'Mark set 1 not done' }).click();
+
+        // Set 1 is to be done again, and opens on what the previous session recorded, not the
+        // correction that was given back with it.
+        const repsTile = page.getByRole('button', { name: 'Increase reps' }).locator('../..');
+        await expect(repsTile).toContainText('10');
+    });
+
+    test('US-GYM-20: Only the last completed set can be given back, and a set not yet done is not editable', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+
+        // Set 2 was the last one done, so only it can be given back.
+        await expect(page.getByRole('button', { name: 'Mark set 2 not done' })).toBeVisible();
+        await page.getByRole('button', { name: 'Edit set 1' }).click();
+        await expect(page.getByRole('button', { name: 'Increase reps for set 1' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Mark set 1 not done' })).toHaveCount(0);
+
+        // Set 3 has not been performed, so it is listed but offers nothing to edit.
+        await expect(page.getByText('Not done yet')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Edit set 3' })).toHaveCount(0);
+    });
+
+    test('US-GYM-20: A timed set can be given back but its recorded duration is not hand-editable', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+        await page.getByRole('button', { name: /Plank/ }).click();
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        await expect(page.getByText(/Timed set \u2014 recorded as \d+s/)).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Increase reps for set 1' })).toHaveCount(0);
+
+        await page.getByRole('button', { name: 'Mark set 1 not done' }).click();
+        await expect(page.getByRole('button', { name: 'Fix a logged set' })).toBeDisabled();
+    });
+
     test('US-GYM-21: With no cycle set up, the dashboard offers to set one up and shows no week markers', async ({ page }) => {
         await expect(page.getByRole('button', { name: /Set up a training cycle/ })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Training cycle', exact: true })).not.toBeVisible();
@@ -709,6 +899,59 @@ test.describe('Gym Tracker Requirements', () => {
         await page.goto('/');
         await page.getByRole('button', { name: 'Gym' }).click();
         await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText(/consider adding weight/i)).not.toBeVisible();
+    });
+
+    test('US-GYM-22: Lowering a set weight is saved, not discarded as a non-increase', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const target = page.getByRole('spinbutton').first();
+        await expect(target).toHaveValue('60');
+        await target.fill('50');
+        await target.blur();
+
+        // Leave and resume, so the value has to come back from storage rather than local state.
+        await page.evaluate(() => window.history.back());
+        await page.getByRole('button', { name: 'Resume' }).click();
+
+        await expect(page.getByRole('spinbutton').first()).toHaveValue('50');
+    });
+
+    test('US-GYM-22: Clearing the weight field restores the previous value instead of saving zero', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const target = page.getByRole('spinbutton').first();
+        await target.fill('');
+        await target.blur();
+
+        await expect(target).toHaveValue('60');
+        await expect(page.getByRole('button', { name: /Bench Press/ })).toContainText('60kg');
+    });
+
+    test('US-GYM-22: Correcting a set below the range top withdraws the suggestion', async ({ page }) => {
+        await page.addInitScript(() => {
+            const today = new Date();
+            const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { '0': 12, '1': 12, '2': 12 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([{ id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }]));
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+        await expect(page.getByText(/consider adding weight/i)).toBeVisible();
+
+        await page.getByRole('button', { name: 'Complete Set' }).click();
+        await page.getByRole('button', { name: 'Skip Rest' }).click();
+
+        await page.getByRole('button', { name: 'Fix a logged set' }).click();
+        const decrease = page.getByRole('button', { name: 'Decrease reps for set 1' });
+        await decrease.click();
+        await decrease.click();
+        await page.getByRole('button', { name: 'Done', exact: true }).click();
 
         await expect(page.getByText(/consider adding weight/i)).not.toBeVisible();
     });

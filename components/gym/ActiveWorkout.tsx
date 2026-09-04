@@ -6,6 +6,8 @@ import { NotificationService } from '../../services/notificationService';
 import { getCycleState } from '../../services/cycleService';
 import ExerciseNoteField from './ExerciseNoteField';
 import ExerciseRepsStepper from './ExerciseRepsStepper';
+import FixSetsSheet from './FixSetsSheet';
+import { DURATION_UNIT, hasTargetValue, parseTarget } from '../../services/setTargetService';
 
 interface ActiveWorkoutProps {
     accountId: string;
@@ -28,19 +30,6 @@ const getFirstUncompletedExerciseIndex = (routineExercises: GymExercise[], worko
 // (even if the exercise's configured target has since changed), or the configured target itself.
 const getDefaultReps = (workout: ActiveWorkoutState, exercise: GymExercise, setIndex: number) =>
     workout.draftReps?.[exercise.id] ?? exercise.lastActualReps?.[setIndex] ?? exercise.targetReps;
-
-// Duration volume is always stored in seconds, because that is what a set is actually measured in.
-const DURATION_UNIT = 's';
-
-const parseTarget = (target: string) => {
-    const value = parseFloat(target) || 0;
-    const unitMatch = target.match(/[a-zA-Z]+/);
-    const unit = unitMatch ? unitMatch[0].toLowerCase() : 'kg';
-    const metric = unit.includes('min') ? 'duration' as const : 'weight' as const;
-    // Targets are written in minutes but sets are timed in seconds; normalise so the two are comparable.
-    const targetSeconds = metric === 'duration' ? Math.round(value * 60) : 0;
-    return { value, unit, metric, targetSeconds };
-};
 
 const buildExerciseSummary = (
     exercise: GymExercise,
@@ -94,6 +83,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
     const [messagingToken, setMessagingToken] = useState<string | null>(null);
     const [showRestCompleteCue, setShowRestCompleteCue] = useState(false);
     const [touchStartX, setTouchStartX] = useState<number | null>(null);
+    const [fixingExerciseId, setFixingExerciseId] = useState<string | null>(null);
     const previousStatusRef = useRef<ActiveWorkoutState['status'] | null>(activeWorkout?.status || null);
 
     useEffect(() => {
@@ -233,9 +223,16 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         });
     };
 
+    // Any changed value is saved, up or down: lowering a load is a correction like any other, and
+    // an edit that only counts when it goes up silently loses the fix for a mistyped weight.
     const handleTargetBlur = async (oldTarget: string, newTarget: string) => {
         if (!currentExercise || oldTarget === newTarget) return;
-        if ((parseFloat(newTarget) || 0) <= (parseFloat(oldTarget) || 0)) return;
+        if (!hasTargetValue(newTarget)) {
+            // Clearing the box to retype is how a phone user changes a number, so an empty field is
+            // an unfinished edit — put the old value back rather than recording a set at zero.
+            handleTargetChange(hasTargetValue(oldTarget) ? oldTarget : '');
+            return;
+        }
         const updated = safeArray(exercises).find(e => e.id === currentExercise.id);
         if (!updated) return;
         try {
@@ -260,6 +257,92 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             console.error('Failed to save exercise note', err);
             setExercises(current => current.map(exercise => exercise.id === exerciseId ? previous : exercise));
         }
+    };
+
+    // --- Correcting a set that is already logged ---
+    // Every correction mirrors the two writes handleCompleteSet makes: the session's own record of
+    // what happened, and the exercise's recall value for next time. Unlike the stepper for the set
+    // still in progress, which only drafts locally until the set is completed, these save as they
+    // are made: the set they describe is already finished, so there is no later commit point to
+    // wait for and a correction must not be able to get lost.
+
+    const persistExercise = (previous: GymExercise, updated: GymExercise, failureMessage: string) => {
+        setExercises(current => current.map(exercise => exercise.id === updated.id ? updated : exercise));
+        StorageService.updateGymExercise(accountId, updated).catch(err => {
+            console.error(failureMessage, err);
+            setExercises(current => current.map(exercise => exercise.id === previous.id ? previous : exercise));
+        });
+    };
+
+    const handleCorrectSetReps = (exerciseId: string, setIndex: number, reps: number) => {
+        if (!activeWorkout) return;
+        const exercise = safeArray(exercises).find(e => e.id === exerciseId);
+        if (!exercise || setIndex >= getCompletedSetCount(activeWorkout, exerciseId)) return;
+
+        const performed = [...(activeWorkout.actualSetReps?.[exerciseId] || [])];
+        // A session that predates per-set reps has none recorded; fill from the target so the
+        // correction still lands on the set the user picked.
+        while (performed.length <= setIndex) performed.push(exercise.targetReps);
+        performed[setIndex] = reps;
+
+        setActiveWorkout({
+            ...activeWorkout,
+            actualSetReps: { ...(activeWorkout.actualSetReps || {}), [exerciseId]: performed },
+        });
+
+        persistExercise(exercise, {
+            ...exercise,
+            lastActualReps: { ...(exercise.lastActualReps || {}), [setIndex]: reps },
+        }, 'Failed to save corrected reps');
+    };
+
+    const handleCorrectSetTarget = (exerciseId: string, setIndex: number, value: number) => {
+        const exercise = safeArray(exercises).find(e => e.id === exerciseId);
+        if (!exercise) return;
+        const targets = [...safeArray(exercise.setTargets)];
+        const corrected = `${value}${parseTarget(targets[setIndex] || '').unit}`;
+        if (corrected === targets[setIndex]) return;
+        targets[setIndex] = corrected;
+        persistExercise(exercise, { ...exercise, setTargets: targets }, 'Failed to save corrected weight');
+    };
+
+    // Only the most recently completed set can be given back. That keeps the recorded arrays
+    // contiguous, so there is never a hole in the middle of a session to re-index around.
+    const handleUncompleteLastSet = (exerciseId: string) => {
+        if (!activeWorkout) return;
+        const completed = getCompletedSetCount(activeWorkout, exerciseId);
+        if (completed <= 0) return;
+        const setIndex = completed - 1;
+
+        cancelPendingRestPush(activeWorkout.pendingRestTaskName);
+        const returnToIndex = routineExercises.findIndex(exercise => exercise.id === exerciseId);
+
+        setActiveWorkout({
+            ...activeWorkout,
+            completedSetsByExercise: { ...(activeWorkout.completedSetsByExercise || {}), [exerciseId]: setIndex },
+            actualSetReps: { ...(activeWorkout.actualSetReps || {}), [exerciseId]: (activeWorkout.actualSetReps?.[exerciseId] || []).slice(0, setIndex) },
+            actualSetDurations: { ...(activeWorkout.actualSetDurations || {}), [exerciseId]: (activeWorkout.actualSetDurations?.[exerciseId] || []).slice(0, setIndex) },
+            // The set has to be performed again: any rest for it is over, and a finished session reopens.
+            currentExerciseIndex: returnToIndex >= 0 ? returnToIndex : activeWorkout.currentExerciseIndex,
+            status: 'active',
+            restEndsAt: undefined,
+            completedAt: undefined,
+            pendingRestTaskName: undefined,
+            setStartedAt: Date.now(),
+        });
+        setFixingExerciseId(null);
+
+        const exercise = safeArray(exercises).find(e => e.id === exerciseId);
+        if (!exercise) return;
+        const restored = { ...(exercise.lastActualReps || {}) };
+        const before = activeWorkout.preSessionLastActualReps?.[exerciseId]?.[setIndex];
+        // With no snapshot the value there was written by this session anyway, so dropping it is
+        // closer to the truth than keeping a number the set no longer stands behind.
+        if (before === undefined) delete restored[setIndex]; else restored[setIndex] = before;
+        persistExercise(exercise, {
+            ...exercise,
+            lastActualReps: Object.keys(restored).length ? restored : undefined,
+        }, 'Failed to restore recalled reps');
     };
 
     const goToExerciseIndex = (index: number) => {
@@ -313,6 +396,13 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         const remainingDraftReps = { ...(activeWorkout.draftReps || {}) };
         delete remainingDraftReps[currentExercise.id];
 
+        // The recall value about to be overwritten belongs to the previous session, and giving this
+        // set back has to restore it — so keep the map as it stood before this session first wrote to it.
+        const preSessionLastActualReps = { ...(activeWorkout.preSessionLastActualReps || {}) };
+        if (!(currentExercise.id in preSessionLastActualReps)) {
+            preSessionLastActualReps[currentExercise.id] = { ...(currentExercise.lastActualReps || {}) };
+        }
+
         // Saved to the exercise in the database immediately, so it survives even if the rest of
         // the session is later abandoned — always, not gated behind a "only if greater" rule.
         const updatedExerciseRecord: GymExercise = {
@@ -339,6 +429,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             actualSetDurations: updatedActualDurations,
             actualSetReps: updatedActualReps,
             draftReps: remainingDraftReps,
+            preSessionLastActualReps,
             pendingRestTaskName: undefined,
         };
 
@@ -446,6 +537,10 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         </div>
     );
     if (!currentExercise) return <div className="p-4 text-slate-500">Loading exercise...</div>;
+
+    const fixingExercise = fixingExerciseId
+        ? routineExercises.find(exercise => exercise.id === fixingExerciseId) || null
+        : null;
 
     const currentSetsCompleted = getCompletedSetCount(activeWorkout, currentExercise.id);
     const currentSetTargetIndex = Math.min(currentSetsCompleted, currentExercise.setCount - 1);
@@ -589,6 +684,12 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                         >
                             Save Workout
                         </button>
+                        <button
+                            onClick={() => setFixingExerciseId(currentExercise.id)}
+                            className="text-xs text-slate-500 hover:text-blue-600 font-bold transition-colors"
+                        >
+                            Fix a set in {currentExercise.name}
+                        </button>
                         <button onClick={abandonSession} className="text-xs text-slate-400 hover:text-red-500 font-bold transition-colors">
                             Abandon instead
                         </button>
@@ -605,9 +706,14 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                                 {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
                             </div>
                             {lastCompletedExercise && (
-                                <div className="text-[11px] text-slate-400 mt-1">
-                                    {Math.min(getCompletedSetCount(activeWorkout, lastCompletedExercise.id), lastCompletedExercise.setCount)}/{lastCompletedExercise.setCount} sets done
-                                </div>
+                                <button
+                                    type="button"
+                                    aria-label="Fix a logged set"
+                                    onClick={() => setFixingExerciseId(lastCompletedExercise.id)}
+                                    className="text-[11px] text-slate-400 mt-1 underline decoration-dotted underline-offset-2 hover:text-blue-600 transition-colors"
+                                >
+                                    {Math.min(getCompletedSetCount(activeWorkout, lastCompletedExercise.id), lastCompletedExercise.setCount)}/{lastCompletedExercise.setCount} sets done · fix
+                                </button>
                             )}
                         </div>
 
@@ -687,7 +793,14 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                         {currentSetsCompleted >= currentExercise.setCount ? (
                             <div className="w-full p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-center">
                                 <div className="text-emerald-600 font-bold mb-1">Exercise complete</div>
-                                <div className="text-emerald-700 text-sm">{currentSetsCompleted} sets done.</div>
+                                <button
+                                    type="button"
+                                    aria-label="Fix a logged set"
+                                    onClick={() => setFixingExerciseId(currentExercise.id)}
+                                    className="text-emerald-700 text-sm underline decoration-dotted underline-offset-2 hover:text-emerald-900 transition-colors"
+                                >
+                                    {currentSetsCompleted} sets done · fix
+                                </button>
                                 {firstUncompletedIndex >= 0 && firstUncompletedIndex !== activeWorkout.currentExerciseIndex && (
                                     <button
                                         onClick={() => goToExerciseIndex(firstUncompletedIndex)}
@@ -700,12 +813,23 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                         ) : (
                             <>
                                 <div className="flex justify-center gap-3 w-full">
-                                    <div className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col items-center">
+                                    <button
+                                        type="button"
+                                        aria-label="Fix a logged set"
+                                        disabled={currentSetsCompleted === 0}
+                                        onClick={() => setFixingExerciseId(currentExercise.id)}
+                                        className="flex-1 bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col items-center transition-colors enabled:hover:border-blue-200 disabled:cursor-default"
+                                    >
                                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Set</div>
                                         <div className="text-xl font-bold text-slate-800">
                                             {currentSetsCompleted + 1} <span className="text-sm text-slate-400 font-medium">/ {currentExercise.setCount}</span>
                                         </div>
-                                    </div>
+                                        {currentSetsCompleted > 0 && (
+                                            <div className="text-[9px] font-bold uppercase tracking-widest text-blue-500 mt-0.5">
+                                                {currentSetsCompleted} done · fix
+                                            </div>
+                                        )}
+                                    </button>
                                     <ExerciseRepsStepper value={currentReps} onChange={handleRepsChange} atTopOfRange={atTopOfRange} />
                                     <div className="flex-1 bg-white p-3 rounded-2xl border border-blue-200 shadow-sm shadow-blue-100">
                                         <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1 text-center">Target</div>
@@ -757,6 +881,19 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                     </div>
                 )}
             </div>
+
+            {fixingExercise && (
+                <FixSetsSheet
+                    exercise={fixingExercise}
+                    completedSets={getCompletedSetCount(activeWorkout, fixingExercise.id)}
+                    actualReps={safeArray(activeWorkout.actualSetReps?.[fixingExercise.id])}
+                    actualDurations={safeArray(activeWorkout.actualSetDurations?.[fixingExercise.id])}
+                    onCorrectReps={(setIndex, reps) => handleCorrectSetReps(fixingExercise.id, setIndex, reps)}
+                    onCorrectTarget={(setIndex, value) => handleCorrectSetTarget(fixingExercise.id, setIndex, value)}
+                    onUncompleteLastSet={() => handleUncompleteLastSet(fixingExercise.id)}
+                    onClose={() => setFixingExerciseId(null)}
+                />
+            )}
         </div>
     );
 }

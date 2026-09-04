@@ -4,6 +4,8 @@ interface ExerciseRepsStepperProps {
     value: number;
     onChange: (value: number) => void;
     atTopOfRange?: boolean;
+    // Names which set this stepper belongs to when more than one is on screen, e.g. "set 2".
+    label?: string;
 }
 
 /**
@@ -14,9 +16,10 @@ interface ExerciseRepsStepperProps {
  * instead of going negative. There's no upper bound. When the current reps sit at or above
  * the cycle's rep-range top, a subtle ring signals "you've maxed this set's range".
  */
-export default function ExerciseRepsStepper({ value, onChange, atTopOfRange = false }: ExerciseRepsStepperProps) {
+export default function ExerciseRepsStepper({ value, onChange, atTopOfRange = false, label }: ExerciseRepsStepperProps) {
     const decrement = () => onChange(Math.max(0, value - 1));
     const increment = () => onChange(value + 1);
+    const suffix = label ? ` for ${label}` : '';
 
     return (
         <div className={`flex-1 bg-white p-3 rounded-2xl border border-emerald-200 shadow-sm shadow-emerald-100 ${atTopOfRange ? 'ring-2 ring-emerald-300' : ''}`}>
@@ -26,7 +29,7 @@ export default function ExerciseRepsStepper({ value, onChange, atTopOfRange = fa
                     type="button"
                     onClick={decrement}
                     disabled={value <= 0}
-                    aria-label="Decrease reps"
+                    aria-label={`Decrease reps${suffix}`}
                     className="w-9 h-9 shrink-0 rounded-full bg-emerald-50 text-emerald-700 text-xl font-bold flex items-center justify-center transition-colors hover:bg-emerald-100 active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                 >
                     &minus;
@@ -35,7 +38,7 @@ export default function ExerciseRepsStepper({ value, onChange, atTopOfRange = fa
                 <button
                     type="button"
                     onClick={increment}
-                    aria-label="Increase reps"
+                    aria-label={`Increase reps${suffix}`}
                     className="w-9 h-9 shrink-0 rounded-full bg-emerald-50 text-emerald-700 text-xl font-bold flex items-center justify-center transition-colors hover:bg-emerald-100 active:scale-95"
                 >
                     +

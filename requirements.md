@@ -164,6 +164,10 @@
 
 **Acceptance criteria**
 - Completing a set starts a rest view that keeps context ("Up Next") and offers "Skip Rest".
+- The rest view also offers a way to correct the set that was just completed.
+- Giving that set back ends the rest, cancels its queued "rest over" notification, and returns to the
+  set so it can be performed again.
+- Correcting a set never pauses, restarts, or skips the rest countdown.
 - Completing every set reaches an explicit "Session Complete" state with a "Save Workout" action.
 
 ### [US-GYM-05] History Defaults to Monthly Calendar
@@ -298,12 +302,18 @@
   is shown.
 - The suggestion is qualitative only: it never states a specific number and never changes the weight
   target. Adding weight remains a manual edit the user makes.
+- That manual edit is never restricted to increases: a value that lowers the load is saved exactly
+  like one that raises it, so a weight entered by mistake can simply be corrected.
+- An empty or unparseable weight field is an unfinished edit, not a target of zero: leaving it
+  restores the previous value rather than recording the set at no load.
 - The suggestion is suppressed during a deload week.
 - The suggestion does not appear for time-based (duration) exercises, when any set has no prior
   recorded reps, or when any set fell short of the range top last time.
 - A cycle must be configured (it holds the rep range); with no cycle there is no suggestion.
 - As live feedback, the reps stepper is subtly highlighted while the current set's reps sit at or
   above the range top. This is informational and changes nothing.
+- The suggestion reads the reps recorded for each set, so correcting a set during the session is
+  reflected in it immediately.
 
 ### [US-GYM-23] See Cycles in the Progress View
 
@@ -323,6 +333,7 @@ as intentional rather than lost progress.
 - With no cycle configured, the chart renders exactly as before, with no cycle overlay or legend.
 - The overlay is derived from each session's own date, so past sessions are placed correctly even as
   the current week advances.
+### [US-GYM-19] Editable Exercise Notes During a Workout
 **As a** user
 **I want to** add, change, or clear an exercise's notes while I am training
 **So that** I can capture a cue at the moment I notice it and have it waiting for me next time.
@@ -359,6 +370,19 @@ remember or re-enter my own progress from the previous session.
 - Saved workout history (History and Progress views) reflects actual reps performed, not the configured
   target, for total reps and total volume going forward. Sessions saved before this feature keep their
   previously saved numbers unchanged.
+- A set that is already logged can be corrected without abandoning the session. Both its reps and its
+  weight are editable while training — from the set screen, from the rest screen, and from a finished
+  exercise or the Session Complete screen, right up until the workout is saved.
+- Correcting a set replaces what was recorded for it, so history totals and what the next session
+  recalls for that set both reflect the correction rather than the value entered by mistake.
+- Only the most recently completed set of an exercise can be given back ("not done"); earlier sets stay
+  editable in place. Giving a set back discards its recording, and the reps recalled for it revert to
+  what was recorded before this session.
+- A set not yet performed is listed for context but cannot be edited.
+- A timed set is measured by the timer rather than typed, so it can be given back but its recorded
+  duration is not hand-editable.
+- Correcting a set adds no permanent controls to the workout screens: it opens on demand from controls
+  that are already there, so the phone-sized set and rest views gain no new rows.
 
 ### [US-GYM-21] Training Cycle Awareness (Periodization)
 
