@@ -316,7 +316,10 @@ as intentional rather than lost progress.
 - When a cycle is configured, the exercise progress chart marks each session by where it fell in the
   cycle: a session during a deload week is visually distinct from one during a building week.
 - A vertical guide marks each cycle boundary (where a later session belongs to a new cycle number).
-- A legend explains the building-week, deload-week, and new-cycle markings.
+- Sessions that predate the cycle's start date are shown as "before cycle" and are not folded into
+  the first cycle, so a cycle set up retroactively still shows its start as a real, visible boundary
+  against the older history — the first cycle's start is marked just like later boundaries.
+- A legend explains the building-week, deload-week, before-cycle (when present), and new-cycle markings.
 - With no cycle configured, the chart renders exactly as before, with no cycle overlay or legend.
 - The overlay is derived from each session's own date, so past sessions are placed correctly even as
   the current week advances.

@@ -15,13 +15,13 @@ interface ExerciseProgressViewProps {
 function CycleDot(props: any) {
     const { cx, cy, payload } = props;
     if (cx == null || cy == null) return null;
-    const isDeload = payload?.isDeload;
+    const fill = payload?.isPreCycle ? '#94a3b8' : payload?.isDeload ? '#f59e0b' : '#2563eb';
     return (
         <circle
             cx={cx}
             cy={cy}
             r={4}
-            fill={isDeload ? '#f59e0b' : '#2563eb'}
+            fill={fill}
             stroke="#fff"
             strokeWidth={1.5}
         />
@@ -47,16 +47,30 @@ export default function ExerciseProgressView({ accountId, exerciseName, onBack }
         return () => unsubscribe();
     }, [accountId]);
 
+    // Local midnight of the cycle's anchor date, so a session is judged "before the cycle" by
+    // calendar day rather than by clock time.
+    const cycleStartMs = useMemo(() => {
+        if (!cycle) return null;
+        const [y, m, d] = cycle.startDate.split('-').map(Number);
+        if (!y || !m || !d) return null;
+        return new Date(y, m - 1, d).getTime();
+    }, [cycle]);
+
     const chartData = useMemo(() => {
         const points = sessions
             .map(session => {
                 const exercise = session.exercisesCompleted?.find(item => item.exerciseName === exerciseName);
                 if (!exercise) return null;
                 // Where this session fell in the training cycle, so the trend can be read
-                // per-cycle and deload weeks stand out from building weeks.
-                const state = cycle ? getCycleState(cycle, new Date(session.startedAt)) : null;
+                // per-cycle and deload weeks stand out. Sessions that predate the cycle's start are
+                // "before cycle" — not folded into cycle 1 — so the first cycle's start is a real
+                // boundary you can see, even when it was set retroactively.
+                const sessionDate = new Date(session.startedAt);
+                const sessionDayMs = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate()).getTime();
+                const isPreCycle = cycleStartMs != null && sessionDayMs < cycleStartMs;
+                const state = cycle && !isPreCycle ? getCycleState(cycle, sessionDate) : null;
                 return {
-                    date: new Date(session.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' }),
+                    date: sessionDate.toLocaleDateString([], { month: 'short', day: 'numeric' }),
                     totalVolume: exercise.totalVolume,
                     totalReps: exercise.totalReps,
                     unit: exercise.unit,
@@ -66,6 +80,7 @@ export default function ExerciseProgressView({ accountId, exerciseName, onBack }
                     dayName: session.dayName,
                     cycleNumber: state ? state.cycleNumber : null,
                     isDeload: state ? state.isDeloadWeek : false,
+                    isPreCycle,
                 };
             })
             .filter(Boolean) as Array<{
@@ -79,19 +94,23 @@ export default function ExerciseProgressView({ accountId, exerciseName, onBack }
                 dayName: string;
                 cycleNumber: number | null;
                 isDeload: boolean;
+                isPreCycle: boolean;
             }>;
         return points;
-    }, [sessions, exerciseName, cycle]);
+    }, [sessions, exerciseName, cycle, cycleStartMs]);
 
-    // The date labels where a new cycle begins (a point whose cycle number differs from the one
-    // before it) — drawn as vertical guides so cycle boundaries are visible in the trend.
+    const hasPreCycle = useMemo(() => chartData.some(p => p.isPreCycle), [chartData]);
+
+    // The date labels where a new cycle begins — a point whose cycle number differs from the one
+    // before it, including the very first cycle's start emerging from pre-cycle history. Drawn as
+    // vertical guides so cycle boundaries are visible in the trend.
     const cycleBoundaries = useMemo(() => {
         if (!cycle) return [] as Array<{ date: string; cycleNumber: number }>;
         const boundaries: Array<{ date: string; cycleNumber: number }> = [];
         for (let i = 1; i < chartData.length; i++) {
             const prev = chartData[i - 1].cycleNumber;
             const curr = chartData[i].cycleNumber;
-            if (curr != null && prev != null && curr !== prev) {
+            if (curr != null && curr !== prev) {
                 boundaries.push({ date: chartData[i].date, cycleNumber: curr });
             }
         }
@@ -150,9 +169,12 @@ export default function ExerciseProgressView({ accountId, exerciseName, onBack }
                         </div>
 
                         {cycle && (
-                            <div className="flex items-center gap-4 text-xs font-medium text-slate-500 -mt-2">
+                            <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500 -mt-2">
                                 <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-600" />Building week</span>
                                 <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500" />Deload week</span>
+                                {hasPreCycle && (
+                                    <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-400" />Before cycle</span>
+                                )}
                                 <span className="flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 border-dashed border-slate-400" />New cycle</span>
                             </div>
                         )}

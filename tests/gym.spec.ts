@@ -774,6 +774,38 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.locator('.recharts-reference-line')).toHaveCount(0);
     });
 
+    test('US-GYM-23: A retroactively started cycle draws its start boundary against older pre-cycle history', async ({ page }) => {
+        await page.addInitScript(() => {
+            const day = 24 * 60 * 60 * 1000;
+            const start = new Date(Date.now() - 3 * day); // cycle started 3 days ago, retroactively
+            const iso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+            const mkSession = (offsetDaysAgo: number, volume: number, id: string) => {
+                const startedAt = Date.now() - offsetDaysAgo * day;
+                return {
+                    id, startedAt, endedAt: startedAt + 3600000, dayId: 'gd1', dayName: 'Push Day', status: 'completed',
+                    exercisesCompleted: [{ exerciseId: 'gx1', exerciseName: 'Bench Press', completedSets: 3, targetReps: 8, totalReps: 24, totalVolume: volume, unit: 'kg', metric: 'weight', setTargets: ['60kg', '60kg', '60kg'] }]
+                };
+            };
+            localStorage.setItem('MOCK_DB_GYM_SESSIONS', JSON.stringify([
+                mkSession(20, 2750, 's1'), // before the cycle
+                mkSession(10, 2750, 's2'), // before the cycle
+                mkSession(1, 1300, 's3'),  // inside the new cycle
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'History' }).click();
+        await page.locator('button').filter({ hasText: '✓' }).first().click();
+        await page.getByRole('button').filter({ hasText: 'Bench Press' }).click();
+
+        await expect(page.getByRole('heading', { name: 'Bench Press' })).toBeVisible();
+        // The first cycle's start is a visible boundary, and older sessions are labelled pre-cycle.
+        await expect(page.getByText('Before cycle')).toBeVisible();
+        await expect(page.locator('.recharts-reference-line')).toHaveCount(1);
+        await expect(page.getByText('Cycle 1')).toBeVisible();
+    });
+
     test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
         const pageErrors: string[] = [];
         page.on('pageerror', error => {
