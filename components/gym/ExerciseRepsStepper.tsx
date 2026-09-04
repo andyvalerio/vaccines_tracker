@@ -3,6 +3,7 @@ import React from 'react';
 interface ExerciseRepsStepperProps {
     value: number;
     onChange: (value: number) => void;
+    atTopOfRange?: boolean;
 }
 
 /**
@@ -10,14 +11,15 @@ interface ExerciseRepsStepperProps {
  *
  * Built for a phone held mid-set, same as ExerciseNoteField: big tap targets. Zero is a
  * valid value (a failed set is still worth recording), so the minus button disables there
- * instead of going negative. There's no upper bound.
+ * instead of going negative. There's no upper bound. When the current reps sit at or above
+ * the cycle's rep-range top, a subtle ring signals "you've maxed this set's range".
  */
-export default function ExerciseRepsStepper({ value, onChange }: ExerciseRepsStepperProps) {
+export default function ExerciseRepsStepper({ value, onChange, atTopOfRange = false }: ExerciseRepsStepperProps) {
     const decrement = () => onChange(Math.max(0, value - 1));
     const increment = () => onChange(value + 1);
 
     return (
-        <div className="flex-1 bg-white p-3 rounded-2xl border border-emerald-200 shadow-sm shadow-emerald-100">
+        <div className={`flex-1 bg-white p-3 rounded-2xl border border-emerald-200 shadow-sm shadow-emerald-100 ${atTopOfRange ? 'ring-2 ring-emerald-300' : ''}`}>
             <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1 text-center">Reps</div>
             <div className="flex items-center justify-center gap-1">
                 <button

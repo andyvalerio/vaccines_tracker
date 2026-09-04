@@ -286,6 +286,25 @@
 - A time-based set targeting one minute is stored and displayed in seconds (e.g. two sets = "120 s").
 - Such totals are never mislabelled as "mins".
 
+### [US-GYM-22] Progression Suggestion (Consider Adding Weight)
+
+**As a** user
+**I want to** be gently prompted to add weight when I've clearly outgrown the current load
+**So that** I keep progressing without the app deciding my numbers for me.
+
+**Acceptance criteria**
+- On the active-set screen of a weight exercise, if the actual reps performed on every set last time
+  reached the top of the cycle's configured rep range, a passive suggestion to consider adding weight
+  is shown.
+- The suggestion is qualitative only: it never states a specific number and never changes the weight
+  target. Adding weight remains a manual edit the user makes.
+- The suggestion is suppressed during a deload week.
+- The suggestion does not appear for time-based (duration) exercises, when any set has no prior
+  recorded reps, or when any set fell short of the range top last time.
+- A cycle must be configured (it holds the rep range); with no cycle there is no suggestion.
+- As live feedback, the reps stepper is subtly highlighted while the current set's reps sit at or
+  above the range top. This is informational and changes nothing.
+
 ### [US-GYM-19] Edit Exercise Notes During a Workout
 **As a** user
 **I want to** add, change, or clear an exercise's notes while I am training

@@ -461,6 +461,23 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
     const upNextWeight = safeArray(currentExercise.setTargets)[upNextTargetIdx] || '';
     const upNextReps = getDefaultReps(activeWorkout, currentExercise, upNextTargetIdx);
 
+    // Progressive overload nudge: on a weight exercise, if every set reached the top of the cycle's
+    // rep range last time, gently suggest adding weight. Purely advisory — never a number, never an
+    // automatic change; adding load stays a manual edit. Suppressed during a deload week.
+    const repRangeMax = cycle?.repRangeMax ?? 0;
+    const currentIsWeight = parsedTarget.metric === 'weight';
+    const atTopOfRange = !!cycle && !isDeloadWeek && currentIsWeight && repRangeMax > 0 && currentReps >= repRangeMax;
+    const suggestAddWeight = (() => {
+        if (!cycle || isDeloadWeek || !currentIsWeight || repRangeMax <= 0) return false;
+        const last = currentExercise.lastActualReps;
+        if (!last) return false;
+        for (let i = 0; i < currentExercise.setCount; i++) {
+            const performed = last[i];
+            if (!Number.isFinite(performed) || performed < repRangeMax) return false;
+        }
+        return true;
+    })();
+
     return (
         <div className="bg-white rounded-3xl shadow-lg border border-slate-100 p-4 sm:p-5 relative flex flex-col gap-3 min-h-[75dvh]">
             {showRestCompleteCue && (
@@ -689,7 +706,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                                             {currentSetsCompleted + 1} <span className="text-sm text-slate-400 font-medium">/ {currentExercise.setCount}</span>
                                         </div>
                                     </div>
-                                    <ExerciseRepsStepper value={currentReps} onChange={handleRepsChange} />
+                                    <ExerciseRepsStepper value={currentReps} onChange={handleRepsChange} atTopOfRange={atTopOfRange} />
                                     <div className="flex-1 bg-white p-3 rounded-2xl border border-blue-200 shadow-sm shadow-blue-100">
                                         <div className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1 text-center">Target</div>
                                         <div className="flex items-center justify-center gap-1">
@@ -713,6 +730,15 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                                         </div>
                                     </div>
                                 </div>
+
+                                {suggestAddWeight && (
+                                    <div className="w-full flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2.5">
+                                        <span aria-hidden="true" className="text-lg">📈</span>
+                                        <div className="text-sm font-bold text-emerald-800">
+                                            You hit the top of your rep range on every set last time — consider adding weight.
+                                        </div>
+                                    </div>
+                                )}
 
                                 <ExerciseNoteField
                                     key={currentExercise.id}

@@ -625,6 +625,94 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByText('Deload Week')).not.toBeVisible();
     });
 
+    test('US-GYM-22: Maxing the rep range on every set last time suggests adding weight', async ({ page }) => {
+        await page.addInitScript(() => {
+            const today = new Date();
+            const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { '0': 12, '1': 12, '2': 12 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([{ id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }]));
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText(/consider adding weight/i)).toBeVisible();
+    });
+
+    test('US-GYM-22: The suggestion is qualitative — no number, no automatic weight change', async ({ page }) => {
+        await page.addInitScript(() => {
+            const today = new Date();
+            const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { '0': 12, '1': 12, '2': 12 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([{ id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }]));
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        // The weight target is untouched by the suggestion.
+        await expect(page.getByRole('spinbutton').first()).toHaveValue('60');
+        // The suggestion names no target weight to jump to.
+        const suggestion = page.getByText(/consider adding weight/i);
+        await expect(suggestion).not.toContainText(/\d/);
+    });
+
+    test('US-GYM-22: No suggestion when a set fell short of the range top last time', async ({ page }) => {
+        await page.addInitScript(() => {
+            const today = new Date();
+            const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { '0': 12, '1': 11, '2': 12 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([{ id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }]));
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText(/consider adding weight/i)).not.toBeVisible();
+    });
+
+    test('US-GYM-22: No suggestion during a deload week even if the range was maxed', async ({ page }) => {
+        await page.addInitScript(() => {
+            const anchor = new Date();
+            anchor.setDate(anchor.getDate() - 30); // deload week of a 4+1 cycle
+            const iso = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-${String(anchor.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { '0': 12, '1': 12, '2': 12 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([{ id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }]));
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText('Deload Week')).toBeVisible();
+        await expect(page.getByText(/consider adding weight/i)).not.toBeVisible();
+    });
+
+    test('US-GYM-22: No suggestion without a configured cycle', async ({ page }) => {
+        await page.addInitScript(() => {
+            localStorage.setItem('MOCK_DB_GYM_EXERCISES', JSON.stringify([
+                { id: 'gx1', name: 'Bench Press', setCount: 3, targetReps: 8, restTimeSeconds: 90, setTargets: ['60kg', '60kg', '60kg'], lastActualReps: { '0': 12, '1': 12, '2': 12 } }
+            ]));
+            localStorage.setItem('MOCK_DB_GYM_DAYS', JSON.stringify([{ id: 'gd1', name: 'Push Day', exerciseIds: ['gx1'] }]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText(/consider adding weight/i)).not.toBeVisible();
+    });
+
     test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
         const pageErrors: string[] = [];
         page.on('pageerror', error => {
