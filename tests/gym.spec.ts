@@ -713,6 +713,67 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByText(/consider adding weight/i)).not.toBeVisible();
     });
 
+    test('US-GYM-23: The progress chart overlays cycles, marking deload weeks and cycle boundaries', async ({ page }) => {
+        await page.addInitScript(() => {
+            const day = 24 * 60 * 60 * 1000;
+            const start = new Date(Date.now() - 40 * day);
+            const iso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+            const mkSession = (offsetDays: number, volume: number, id: string) => {
+                const startedAt = start.getTime() + offsetDays * day;
+                return {
+                    id, startedAt, endedAt: startedAt + 3600000, dayId: 'gd1', dayName: 'Push Day', status: 'completed',
+                    exercisesCompleted: [{ exerciseId: 'gx1', exerciseName: 'Bench Press', completedSets: 3, targetReps: 8, totalReps: 24, totalVolume: volume, unit: 'kg', metric: 'weight', setTargets: ['60kg', '60kg', '60kg'] }]
+                };
+            };
+            localStorage.setItem('MOCK_DB_GYM_SESSIONS', JSON.stringify([
+                mkSession(2, 1400, 's1'),   // cycle 1, building week
+                mkSession(30, 1200, 's2'),  // cycle 1, deload week
+                mkSession(38, 1500, 's3'),  // cycle 2, building week
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'History' }).click();
+        await page.locator('button').filter({ hasText: '✓' }).first().click();
+        await page.getByRole('button').filter({ hasText: 'Bench Press' }).click();
+
+        await expect(page.getByRole('heading', { name: 'Bench Press' })).toBeVisible();
+        // Legend explains the overlay.
+        await expect(page.getByText('Building week')).toBeVisible();
+        await expect(page.getByText('Deload week')).toBeVisible();
+        await expect(page.getByText('New cycle')).toBeVisible();
+        // Exactly one cycle boundary (cycle 1 -> cycle 2) is drawn.
+        await expect(page.locator('.recharts-reference-line')).toHaveCount(1);
+        await expect(page.getByText('Cycle 2')).toBeVisible();
+    });
+
+    test('US-GYM-23: With no cycle configured the progress chart has no cycle overlay', async ({ page }) => {
+        await page.addInitScript(() => {
+            const day = 24 * 60 * 60 * 1000;
+            const mkSession = (offsetDays: number, volume: number, id: string) => {
+                const startedAt = Date.now() - offsetDays * day;
+                return {
+                    id, startedAt, endedAt: startedAt + 3600000, dayId: 'gd1', dayName: 'Push Day', status: 'completed',
+                    exercisesCompleted: [{ exerciseId: 'gx1', exerciseName: 'Bench Press', completedSets: 3, targetReps: 8, totalReps: 24, totalVolume: volume, unit: 'kg', metric: 'weight', setTargets: ['60kg', '60kg', '60kg'] }]
+                };
+            };
+            localStorage.setItem('MOCK_DB_GYM_SESSIONS', JSON.stringify([
+                mkSession(5, 1400, 's1'),
+                mkSession(2, 1500, 's2'),
+            ]));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'History' }).click();
+        await page.locator('button').filter({ hasText: '✓' }).first().click();
+        await page.getByRole('button').filter({ hasText: 'Bench Press' }).click();
+
+        await expect(page.getByRole('heading', { name: 'Bench Press' })).toBeVisible();
+        await expect(page.getByText('New cycle')).not.toBeVisible();
+        await expect(page.locator('.recharts-reference-line')).toHaveCount(0);
+    });
+
     test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
         const pageErrors: string[] = [];
         page.on('pageerror', error => {

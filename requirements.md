@@ -305,7 +305,21 @@
 - As live feedback, the reps stepper is subtly highlighted while the current set's reps sit at or
   above the range top. This is informational and changes nothing.
 
-### [US-GYM-19] Edit Exercise Notes During a Workout
+### [US-GYM-23] See Cycles in the Progress View
+
+**As a** user
+**I want to** see my training cycles overlaid on an exercise's progress chart
+**So that** I can read progression both within a cycle and across cycles, and recognise deload dips
+as intentional rather than lost progress.
+
+**Acceptance criteria**
+- When a cycle is configured, the exercise progress chart marks each session by where it fell in the
+  cycle: a session during a deload week is visually distinct from one during a building week.
+- A vertical guide marks each cycle boundary (where a later session belongs to a new cycle number).
+- A legend explains the building-week, deload-week, and new-cycle markings.
+- With no cycle configured, the chart renders exactly as before, with no cycle overlay or legend.
+- The overlay is derived from each session's own date, so past sessions are placed correctly even as
+  the current week advances.
 **As a** user
 **I want to** add, change, or clear an exercise's notes while I am training
 **So that** I can capture a cue at the moment I notice it and have it waiting for me next time.
