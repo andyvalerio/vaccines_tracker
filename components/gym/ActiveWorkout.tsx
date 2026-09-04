@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StorageService } from '../../services/storageService';
 import { useWorkoutSession } from '../../hooks/useWorkoutSession';
-import { ActiveWorkout as ActiveWorkoutState, GymDay, GymExercise, WorkoutHistorySet } from '../../types';
+import { ActiveWorkout as ActiveWorkoutState, GymDay, GymExercise, TrainingCycle, WorkoutHistorySet } from '../../types';
 import { NotificationService } from '../../services/notificationService';
+import { getCycleState } from '../../services/cycleService';
 import ExerciseNoteField from './ExerciseNoteField';
 import ExerciseRepsStepper from './ExerciseRepsStepper';
 
@@ -87,6 +88,7 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
     const { activeWorkout, setActiveWorkout } = useWorkoutSession();
     const [days, setDays] = useState<GymDay[]>([]);
     const [exercises, setExercises] = useState<GymExercise[]>([]);
+    const [cycle, setCycle] = useState<TrainingCycle | null>(null);
     const [loading, setLoading] = useState(true);
     const [timeLeft, setTimeLeft] = useState(0);
     const [messagingToken, setMessagingToken] = useState<string | null>(null);
@@ -100,8 +102,11 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
             setLoading(false);
         });
         const unsubExercises = StorageService.subscribeGymExercises(accountId, setExercises);
-        return () => { unsubDays(); unsubExercises(); };
+        const unsubCycle = StorageService.subscribeTrainingCycle(accountId, setCycle);
+        return () => { unsubDays(); unsubExercises(); unsubCycle(); };
     }, [accountId]);
+
+    const isDeloadWeek = useMemo(() => (cycle ? getCycleState(cycle).isDeloadWeek : false), [cycle]);
 
     const day = useMemo(() => {
         if (!activeWorkout) return null;
@@ -507,6 +512,17 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
                     <div className="bg-blue-600 h-full transition-all duration-500" style={{ width: `${progress}%` }} />
                 </div>
             </div>
+
+            {/* Deload reminder — informational only, never changes any target */}
+            {isDeloadWeek && !isCompleted && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5">
+                    <span className="text-lg" aria-hidden="true">🪶</span>
+                    <div>
+                        <div className="text-[10px] font-black uppercase tracking-widest text-amber-600">Deload Week</div>
+                        <div className="text-sm font-bold text-amber-800">Go light — focus on recovery.</div>
+                    </div>
+                </div>
+            )}
 
             {/* Exercise pills — horizontally scrollable, with weight label */}
             <div className="flex gap-1.5 overflow-x-auto pb-1 flex-nowrap -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>

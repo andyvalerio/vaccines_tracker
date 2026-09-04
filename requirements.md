@@ -168,3 +168,28 @@ remember or re-enter my own progress from the previous session.
 - Saved workout history (History and Progress views) reflects actual reps performed, not the configured
   target, for total reps and total volume going forward. Sessions saved before this feature keep their
   previously saved numbers unchanged.
+
+### [US-GYM-21] Training Cycle Awareness (Periodization)
+
+**As a** user
+**I want to** define a repeating training cycle of several building weeks followed by an optional
+lighter "deload" week, and see at a glance which week of the cycle I am currently in
+**So that** I can apply progressive overload deliberately across weeks instead of guessing, and know
+when it is time to back off and recover.
+
+**Acceptance criteria**
+- A single training cycle applies to all training (it is global, not per-routine).
+- The cycle is optional: until the user sets one up, no cycle indicator is shown, only an
+  affordance to set one up.
+- Setting up a cycle defaults to 4 building weeks plus a deload week, and a rep range of 8–12, and
+  anchors the cycle's start to today.
+- The cycle is configurable: number of building weeks, whether there is a deload week, and the rep
+  range used for progression suggestions.
+- The current week is derived from the cycle's start date and today's date, so a week is never
+  manually advanced and missed calendar weeks do not desynchronise it.
+- The Gym dashboard shows the cycle visually as a row of week markers with the current week
+  highlighted and the deload week visually distinct, plus a plain-language label such as
+  "Week 3 of 4 · deload next week" or, during the deload week, "Deload week — go light".
+- "Start new cycle" re-anchors the cycle to today without changing its configuration.
+- During a deload week, the active workout shows a passive "go light" reminder. It never changes,
+  reduces, or otherwise prescribes any set's target — it is informational only.

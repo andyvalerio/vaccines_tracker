@@ -544,6 +544,75 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(repsTile).toContainText('10');
     });
 
+    test('US-GYM-21: With no cycle set up, the dashboard offers to set one up and shows no week markers', async ({ page }) => {
+        await expect(page.getByRole('button', { name: /Set up a training cycle/ })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Training cycle', exact: true })).not.toBeVisible();
+    });
+
+    test('US-GYM-21: Setting up a cycle shows the current week, defaulting to week 1 of a 4+1 cycle', async ({ page }) => {
+        await page.getByRole('button', { name: /Set up a training cycle/ }).click();
+        await expect(page.getByRole('heading', { name: 'Training Cycle' })).toBeVisible();
+        await page.getByRole('button', { name: 'Set up cycle' }).click();
+
+        // Anchored today, so we are in the first building week.
+        await expect(page.getByText('Week 1 of 4')).toBeVisible();
+    });
+
+    test('US-GYM-21: Cycle configuration (building weeks and rep range) persists', async ({ page }) => {
+        await page.getByRole('button', { name: /Set up a training cycle/ }).click();
+        await page.getByRole('button', { name: 'More building weeks' }).click(); // 4 -> 5
+        await page.getByLabel('Maximum reps').fill('15');
+        await page.getByRole('button', { name: 'Set up cycle' }).click();
+
+        // Five building weeks now, still the first of them.
+        await expect(page.getByText('Week 1 of 5')).toBeVisible();
+
+        // Reopen: the saved rep range is still there.
+        await page.getByRole('button', { name: 'Training cycle', exact: true }).click();
+        await expect(page.getByLabel('Maximum reps')).toHaveValue('15');
+    });
+
+    test('US-GYM-21: During a deload week the dashboard says so', async ({ page }) => {
+        await page.addInitScript(() => {
+            const anchor = new Date();
+            anchor.setDate(anchor.getDate() - 30); // ~4 weeks in: the deload week of a 4+1 cycle
+            const iso = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-${String(anchor.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+
+        await expect(page.getByRole('button', { name: 'Training cycle', exact: true })).toContainText('Deload week');
+    });
+
+    test('US-GYM-21: A deload week shows a passive go-light reminder inside the workout', async ({ page }) => {
+        await page.addInitScript(() => {
+            const anchor = new Date();
+            anchor.setDate(anchor.getDate() - 30);
+            const iso = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-${String(anchor.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText('Deload Week')).toBeVisible();
+        await expect(page.getByText('Go light')).toBeVisible();
+    });
+
+    test('US-GYM-21: A building week shows no deload reminder inside the workout', async ({ page }) => {
+        await page.addInitScript(() => {
+            const anchor = new Date(); // anchored today: first building week
+            const iso = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-${String(anchor.getDate()).padStart(2, '0')}`;
+            localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify({ accumulationWeeks: 4, hasDeloadWeek: true, startDate: iso, repRangeMin: 8, repRangeMax: 12 }));
+        });
+        await page.goto('/');
+        await page.getByRole('button', { name: 'Gym' }).click();
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        await expect(page.getByText('Deload Week')).not.toBeVisible();
+    });
+
     test('US-GYM-06: Starting a workout does not crash on legacy malformed gym data', async ({ page }) => {
         const pageErrors: string[] = [];
         page.on('pageerror', error => {

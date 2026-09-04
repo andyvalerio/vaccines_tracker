@@ -1,5 +1,5 @@
 
-import { Vaccine, Account, Suggestion, DietEntry, BloodMarker, BloodMarkerRecord, GymExercise, GymDay, WorkoutSession } from '../types';
+import { Vaccine, Account, Suggestion, DietEntry, BloodMarker, BloodMarkerRecord, GymExercise, GymDay, WorkoutSession, TrainingCycle } from '../types';
 import { User } from 'firebase/auth';
 import { db } from '../firebaseConfig';
 import { ref, set, push, remove, onValue, off, get, child, query, orderByChild } from 'firebase/database';
@@ -40,6 +40,21 @@ const normalizeGymDay = (day?: Partial<GymDay> | null): GymDay => {
     id: safeDay.id || '',
     name: safeDay.name || 'Routine',
     exerciseIds: Array.isArray(safeDay.exerciseIds) ? safeDay.exerciseIds.filter(Boolean) : [],
+  };
+};
+
+const normalizeTrainingCycle = (cycle?: Partial<TrainingCycle> | null): TrainingCycle => {
+  const safeCycle = cycle || {};
+  const accumulationWeeks = Math.max(1, Math.floor(Number(safeCycle.accumulationWeeks)) || 4);
+  let repRangeMin = Math.max(1, Math.floor(Number(safeCycle.repRangeMin)) || 8);
+  let repRangeMax = Math.max(1, Math.floor(Number(safeCycle.repRangeMax)) || 12);
+  if (repRangeMax < repRangeMin) [repRangeMin, repRangeMax] = [repRangeMax, repRangeMin];
+  return {
+    accumulationWeeks,
+    hasDeloadWeek: safeCycle.hasDeloadWeek !== false,
+    startDate: typeof safeCycle.startDate === 'string' && safeCycle.startDate ? safeCycle.startDate : new Date().toISOString().slice(0, 10),
+    repRangeMin,
+    repRangeMax,
   };
 };
 
@@ -284,6 +299,7 @@ export const StorageService = {
   _gymExerciseSubscribers: [] as ((exercises: GymExercise[]) => void)[],
   _gymDaySubscribers: [] as ((days: GymDay[]) => void)[],
   _gymSessionSubscribers: [] as ((sessions: WorkoutSession[]) => void)[],
+  _gymCycleSubscribers: [] as ((cycle: TrainingCycle | null) => void)[],
 
   _notifyMarkerSubscribers: () => {
     const stored = localStorage.getItem('MOCK_DB_MARKERS');
@@ -453,6 +469,12 @@ export const StorageService = {
       { id: 'gd1', name: 'Push Day', exerciseIds: ['gx1', 'gx2', 'gx3'] }
     ];
     StorageService._gymDaySubscribers.forEach(cb => cb(days.map(normalizeGymDay)));
+  },
+
+  _notifyGymCycleSubscribers: () => {
+    const stored = localStorage.getItem('MOCK_DB_GYM_CYCLE');
+    const cycle = stored ? normalizeTrainingCycle(JSON.parse(stored)) : null;
+    StorageService._gymCycleSubscribers.forEach(cb => cb(cycle));
   },
 
   _notifyGymSessionSubscribers: () => {
@@ -684,5 +706,36 @@ export const StorageService = {
     }
 
     await remove(ref(db, `users/${accountId}/gym/sessions/${sessionId}`));
+  },
+
+  subscribeTrainingCycle: (accountId: string, onUpdate: (cycle: TrainingCycle | null) => void): () => void => {
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      StorageService._gymCycleSubscribers.push(onUpdate);
+      StorageService._notifyGymCycleSubscribers();
+      return () => {
+        StorageService._gymCycleSubscribers = StorageService._gymCycleSubscribers.filter(cb => cb !== onUpdate);
+      };
+    }
+
+    const cycleRef = ref(db, `users/${accountId}/gym/cycle`);
+    const listener = onValue(cycleRef, (snapshot) => {
+      const data = snapshot.val();
+      onUpdate(data ? normalizeTrainingCycle(data) : null);
+    });
+
+    return () => off(cycleRef, 'value', listener);
+  },
+
+  saveTrainingCycle: async (accountId: string, cycle: TrainingCycle): Promise<TrainingCycle> => {
+    const normalizedCycle = normalizeTrainingCycle(cycle);
+    if (localStorage.getItem('E2E_TEST_MODE')) {
+      localStorage.setItem('MOCK_DB_GYM_CYCLE', JSON.stringify(normalizedCycle));
+      StorageService._notifyGymCycleSubscribers();
+      return normalizedCycle;
+    }
+
+    const cycleRef = ref(db, `users/${accountId}/gym/cycle`);
+    await set(cycleRef, normalizedCycle);
+    return normalizedCycle;
   }
 };

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Account, GymDay } from '../../types';
+import { Account, GymDay, TrainingCycle } from '../../types';
 import { StorageService } from '../../services/storageService';
 import WorkoutEditor from './WorkoutEditor';
 import ActiveWorkout from './ActiveWorkout';
 import WorkoutHistory from './WorkoutHistory';
 import ExerciseProgressView from './ExerciseProgressView';
+import CycleIndicator from './CycleIndicator';
+import CycleSettings from './CycleSettings';
 import { useWorkoutSession } from '../../hooks/useWorkoutSession';
 
 type GymView = 'dashboard' | 'editor' | 'workout' | 'history' | 'exercise-progress';
@@ -19,6 +21,8 @@ export default function GymDashboard({ account }: GymDashboardProps) {
     const [loading, setLoading] = useState(true);
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [selectedExerciseName, setSelectedExerciseName] = useState<string | null>(null);
+    const [cycle, setCycle] = useState<TrainingCycle | null>(null);
+    const [showCycleSettings, setShowCycleSettings] = useState(false);
 
     const { activeWorkout, setActiveWorkout } = useWorkoutSession();
 
@@ -50,6 +54,11 @@ export default function GymDashboard({ account }: GymDashboardProps) {
             setDays(loadedDays);
             setLoading(false);
         });
+        return () => unsubscribe();
+    }, [account.id]);
+
+    useEffect(() => {
+        const unsubscribe = StorageService.subscribeTrainingCycle(account.id, setCycle);
         return () => unsubscribe();
     }, [account.id]);
 
@@ -120,6 +129,12 @@ export default function GymDashboard({ account }: GymDashboardProps) {
                     </button>
                 </div>
             </div>
+
+            <CycleIndicator cycle={cycle} onConfigure={() => setShowCycleSettings(true)} />
+
+            {showCycleSettings && (
+                <CycleSettings accountId={account.id} cycle={cycle} onClose={() => setShowCycleSettings(false)} />
+            )}
 
             {activeDayName && (
                 <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 flex items-center justify-between gap-3">

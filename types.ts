@@ -76,6 +76,14 @@ export interface GymDay {
   exerciseIds: string[];
 }
 
+export interface TrainingCycle {
+  accumulationWeeks: number; // number of building weeks before an optional deload
+  hasDeloadWeek: boolean;    // whether the cycle ends with a lighter "go light" week
+  startDate: string;         // ISO YYYY-MM-DD anchor; the current week is derived from this
+  repRangeMin: number;       // lower bound of the target rep range (progression suggestions)
+  repRangeMax: number;       // upper bound; hitting this on every set suggests adding weight
+}
+
 export interface ActiveWorkout {
   startedAt: number;
   dayId: string;
