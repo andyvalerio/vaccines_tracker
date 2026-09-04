@@ -128,8 +128,163 @@
 
 ## Gym Tracker
 
-> Requirements US-GYM-01 through US-GYM-18 are currently defined only by `tests/gym.spec.ts`
-> and have not yet been written up here.
+### [US-GYM-01] View Gym Dashboard
+**As a** user
+**I want to** open a Gym tab with a dashboard listing my routines
+**So that** I have a single home for starting and managing my training.
+
+**Acceptance criteria**
+- The Gym tab shows a "Gym Tracker" heading and a "Start a Workout" section.
+- Each routine is listed with its name and a Start button.
+
+### [US-GYM-02] Manage Routines and Exercise Library
+**As a** user
+**I want to** navigate from the dashboard to a routines editor and an exercise library
+**So that** I can create routines and maintain the exercises they draw from.
+
+**Acceptance criteria**
+- A "Routines" action opens the routines editor ("My Routines").
+- From there an "Exercises" action opens the "Exercise Library".
+- With no routines yet, the editor shows an empty state.
+
+### [US-GYM-03] Single Routine Builder Flow
+**As a** user
+**I want to** build a routine in one builder screen that searches my exercise library
+**So that** I can assemble and trim a routine without a multi-step wizard.
+
+**Acceptance criteria**
+- Editing a routine opens a "Routine Builder".
+- The builder offers a search over the exercise library.
+- Exercises already in the routine can be removed inline.
+
+### [US-GYM-04] Rest Between Sets and Explicit Session Completion
+**As a** user
+**I want to** complete a set, take a tracked rest with the next set shown, and finish the session deliberately
+**So that** I pace my sets and never end a workout by accident.
+
+**Acceptance criteria**
+- Completing a set starts a rest view that keeps context ("Up Next") and offers "Skip Rest".
+- Completing every set reaches an explicit "Session Complete" state with a "Save Workout" action.
+
+### [US-GYM-05] History Defaults to Monthly Calendar
+**As a** user
+**I want to** see my workout history as a monthly calendar by default
+**So that** I can see at a glance which days I trained.
+
+**Acceptance criteria**
+- History opens on a "Monthly Calendar" view.
+- Month navigation ("Prev Month", "This Month") is available.
+
+### [US-GYM-06] Resilient to Legacy or Malformed Data
+**As a** user
+**I want to** start a workout even if some stored gym data is old or malformed
+**So that** a bad record never breaks my ability to train.
+
+**Acceptance criteria**
+- Starting a workout with malformed exercise/day data does not throw an uncaught error.
+- Missing or invalid fields are defaulted rather than crashing the session.
+
+### [US-GYM-07] Out-of-Order Training Finishes the Current Exercise First
+**As a** user
+**I want to** jump to any exercise and have all of its sets completed before the app moves me on
+**So that** training out of the listed order still respects each exercise's set count.
+
+**Acceptance criteria**
+- Selecting an exercise makes it current regardless of list order.
+- Each completed set advances within that same exercise until its sets are done.
+- Only when the current exercise is fully complete does the app move to another.
+
+### [US-GYM-08] Up Next Shows the Weight for the Next Set
+**As a** user
+**I want to** see the upcoming set's weight on the rest screen
+**So that** I can set up the next set during my rest.
+
+**Acceptance criteria**
+- The rest screen's "Up Next" shows the correct set number and the weight for that set.
+
+### [US-GYM-09] Per-Exercise Weight Labels in the Nav Strip
+**As a** user
+**I want to** see each exercise's working weight on its pill in the nav strip
+**So that** I can glance at the loads across the whole session.
+
+**Acceptance criteria**
+- On workout start, each exercise pill shows its weight (or time target) label.
+
+### [US-GYM-10] Abandon Session Discards Progress
+**As a** user
+**I want to** abandon a session and have its progress discarded
+**So that** a scrapped workout leaves no lingering active session.
+
+**Acceptance criteria**
+- Abandoning navigates to history and clears the session.
+- The dashboard shows no "Active Session" banner afterwards.
+
+### [US-GYM-11] Back Button Preserves the Session
+**As a** user
+**I want to** leave a workout with the browser/phone back button without losing it
+**So that** an accidental back press doesn't discard my progress.
+
+**Acceptance criteria**
+- Pressing back from a workout lands on the dashboard with an "Active Session" resume banner.
+
+### [US-GYM-12] Resume Restores Workout State
+**As a** user
+**I want to** resume an active session from the dashboard
+**So that** I continue exactly where I left off.
+
+**Acceptance criteria**
+- "Resume" reopens the workout at the same point (same current set actionable).
+
+### [US-GYM-13] Completing One Exercise Out of Order Does Not End the Session
+**As a** user
+**I want to** finish a single exercise early without the app declaring the whole session done
+**So that** remaining exercises are still expected.
+
+**Acceptance criteria**
+- Completing all sets of one exercise while others remain does not show "Session Complete".
+- The app continues to the next uncompleted exercise ("Up Next").
+
+### [US-GYM-14] Save & Complete With Partial Completion
+**As a** user
+**I want to** save and finish a session even if not every set was done
+**So that** I can log a shortened workout and leave cleanly.
+
+**Acceptance criteria**
+- "Save & Complete" from a partially finished session navigates to history.
+- No active session remains afterwards.
+
+### [US-GYM-15] Correct Set Number When Partially Complete
+**As a** user
+**I want to** the rest screen to show the truly next set of a partially completed exercise
+**So that** the count never resets to set 1.
+
+**Acceptance criteria**
+- After completing sets 1 and 2 of a three-set exercise, "Up Next" shows Set 3/3.
+
+### [US-GYM-16] Full Out-of-Order Workout Reaches Session Complete
+**As a** user
+**I want to** complete every exercise in any order and still reach the end state
+**So that** order never prevents finishing.
+
+**Acceptance criteria**
+- Completing all sets of all exercises, in any order, reaches "Session Complete" with "Save Workout".
+
+### [US-GYM-17] History Row Progress Label
+**As a** user
+**I want to** open an exercise's progress from a history entry via a clear "Progress" label
+**So that** the affordance is concise and consistent.
+
+**Acceptance criteria**
+- An exercise row in a history day shows a "Progress" label (not "Open Progress").
+
+### [US-GYM-18] Time-Based Sets Saved in Seconds
+**As a** user
+**I want to** time-based exercises recorded and shown in seconds
+**So that** durations are accurate and correctly labelled.
+
+**Acceptance criteria**
+- A time-based set targeting one minute is stored and displayed in seconds (e.g. two sets = "120 s").
+- Such totals are never mislabelled as "mins".
 
 ### [US-GYM-19] Edit Exercise Notes During a Workout
 **As a** user
