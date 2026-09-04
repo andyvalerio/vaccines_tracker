@@ -15,7 +15,7 @@ interface CycleSettingsProps {
  * today without touching its configuration.
  */
 export default function CycleSettings({ accountId, cycle, onClose }: CycleSettingsProps) {
-    const [draft, setDraft] = useState<TrainingCycle>(cycle || DEFAULT_CYCLE);
+    const [draft, setDraft] = useState<TrainingCycle>(cycle || { ...DEFAULT_CYCLE, startDate: todayISO() });
     const [saving, setSaving] = useState(false);
 
     const update = (patch: Partial<TrainingCycle>) => setDraft(prev => ({ ...prev, ...patch }));
@@ -40,6 +40,19 @@ export default function CycleSettings({ accountId, cycle, onClose }: CycleSettin
                 <div className="flex items-center justify-between">
                     <h3 className="text-lg font-bold text-slate-800">Training Cycle</h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="block text-sm font-bold text-slate-700">Cycle start date</label>
+                    <input
+                        type="date"
+                        aria-label="Cycle start date"
+                        value={draft.startDate}
+                        max={todayISO()}
+                        onChange={e => update({ startDate: e.target.value || todayISO() })}
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800"
+                    />
+                    <p className="text-xs text-slate-500">Set it to the day you actually started week 1 — it can be in the past.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -96,7 +109,7 @@ export default function CycleSettings({ accountId, cycle, onClose }: CycleSettin
                     </div>
                 </div>
 
-                <div className="space-y-2 pt-2">
+                <div className="pt-2">
                     <button
                         onClick={() => save(draft)}
                         disabled={saving}
@@ -104,15 +117,6 @@ export default function CycleSettings({ accountId, cycle, onClose }: CycleSettin
                     >
                         {cycle ? 'Save' : 'Set up cycle'}
                     </button>
-                    {cycle && (
-                        <button
-                            onClick={() => save({ ...draft, startDate: todayISO() })}
-                            disabled={saving}
-                            className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors disabled:opacity-60"
-                        >
-                            Start new cycle (from today)
-                        </button>
-                    )}
                 </div>
             </div>
         </div>

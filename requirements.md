@@ -337,7 +337,9 @@ when it is time to back off and recover.
 - The cycle is optional: until the user sets one up, no cycle indicator is shown, only an
   affordance to set one up.
 - Setting up a cycle defaults to 4 building weeks plus a deload week, and a rep range of 8–12, and
-  anchors the cycle's start to today.
+  defaults the start date to today.
+- The start date is explicitly selectable and may be in the past, so a cycle already underway can be
+  anchored retroactively to the day week 1 actually began.
 - The cycle is configurable: number of building weeks, whether there is a deload week, and the rep
   range used for progression suggestions.
 - The current week is derived from the cycle's start date and today's date, so a week is never
@@ -345,6 +347,5 @@ when it is time to back off and recover.
 - The Gym dashboard shows the cycle visually as a row of week markers with the current week
   highlighted and the deload week visually distinct, plus a plain-language label such as
   "Week 3 of 4 · deload next week" or, during the deload week, "Deload week — go light".
-- "Start new cycle" re-anchors the cycle to today without changing its configuration.
 - During a deload week, the active workout shows a passive "go light" reminder. It never changes,
   reduces, or otherwise prescribes any set's target — it is informational only.

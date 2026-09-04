@@ -558,6 +558,18 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByText('Week 1 of 4')).toBeVisible();
     });
 
+    test('US-GYM-21: A retroactive start date puts you in the right week of the cycle', async ({ page }) => {
+        const start = new Date();
+        start.setDate(start.getDate() - 15); // 2 whole weeks ago -> the third week
+        const iso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+
+        await page.getByRole('button', { name: /Set up a training cycle/ }).click();
+        await page.getByLabel('Cycle start date').fill(iso);
+        await page.getByRole('button', { name: 'Set up cycle' }).click();
+
+        await expect(page.getByText('Week 3 of 4')).toBeVisible();
+    });
+
     test('US-GYM-21: Cycle configuration (building weeks and rep range) persists', async ({ page }) => {
         await page.getByRole('button', { name: /Set up a training cycle/ }).click();
         await page.getByRole('button', { name: 'More building weeks' }).click(); // 4 -> 5
