@@ -6,6 +6,7 @@ import { NotificationService } from '../../services/notificationService';
 import { getCycleState } from '../../services/cycleService';
 import ExerciseNoteField from './ExerciseNoteField';
 import ExerciseRepsStepper from './ExerciseRepsStepper';
+import { DURATION_UNIT, hasTargetValue, parseTarget } from '../../services/setTargetService';
 
 interface ActiveWorkoutProps {
     accountId: string;
@@ -28,19 +29,6 @@ const getFirstUncompletedExerciseIndex = (routineExercises: GymExercise[], worko
 // (even if the exercise's configured target has since changed), or the configured target itself.
 const getDefaultReps = (workout: ActiveWorkoutState, exercise: GymExercise, setIndex: number) =>
     workout.draftReps?.[exercise.id] ?? exercise.lastActualReps?.[setIndex] ?? exercise.targetReps;
-
-// Duration volume is always stored in seconds, because that is what a set is actually measured in.
-const DURATION_UNIT = 's';
-
-const parseTarget = (target: string) => {
-    const value = parseFloat(target) || 0;
-    const unitMatch = target.match(/[a-zA-Z]+/);
-    const unit = unitMatch ? unitMatch[0].toLowerCase() : 'kg';
-    const metric = unit.includes('min') ? 'duration' as const : 'weight' as const;
-    // Targets are written in minutes but sets are timed in seconds; normalise so the two are comparable.
-    const targetSeconds = metric === 'duration' ? Math.round(value * 60) : 0;
-    return { value, unit, metric, targetSeconds };
-};
 
 const buildExerciseSummary = (
     exercise: GymExercise,
@@ -233,9 +221,16 @@ export default function ActiveWorkout({ accountId, onFinish }: ActiveWorkoutProp
         });
     };
 
+    // Any changed value is saved, up or down: lowering a load is a correction like any other, and
+    // an edit that only counts when it goes up silently loses the fix for a mistyped weight.
     const handleTargetBlur = async (oldTarget: string, newTarget: string) => {
         if (!currentExercise || oldTarget === newTarget) return;
-        if ((parseFloat(newTarget) || 0) <= (parseFloat(oldTarget) || 0)) return;
+        if (!hasTargetValue(newTarget)) {
+            // Clearing the box to retype is how a phone user changes a number, so an empty field is
+            // an unfinished edit — put the old value back rather than recording a set at zero.
+            handleTargetChange(hasTargetValue(oldTarget) ? oldTarget : '');
+            return;
+        }
         const updated = safeArray(exercises).find(e => e.id === currentExercise.id);
         if (!updated) return;
         try {

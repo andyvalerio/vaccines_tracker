@@ -298,12 +298,18 @@
   is shown.
 - The suggestion is qualitative only: it never states a specific number and never changes the weight
   target. Adding weight remains a manual edit the user makes.
+- That manual edit is never restricted to increases: a value that lowers the load is saved exactly
+  like one that raises it, so a weight entered by mistake can simply be corrected.
+- An empty or unparseable weight field is an unfinished edit, not a target of zero: leaving it
+  restores the previous value rather than recording the set at no load.
 - The suggestion is suppressed during a deload week.
 - The suggestion does not appear for time-based (duration) exercises, when any set has no prior
   recorded reps, or when any set fell short of the range top last time.
 - A cycle must be configured (it holds the rep range); with no cycle there is no suggestion.
 - As live feedback, the reps stepper is subtly highlighted while the current set's reps sit at or
   above the range top. This is informational and changes nothing.
+- The suggestion reads the reps recorded for each set, so correcting a set during the session is
+  reflected in it immediately.
 
 ### [US-GYM-23] See Cycles in the Progress View
 

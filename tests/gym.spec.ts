@@ -713,6 +713,32 @@ test.describe('Gym Tracker Requirements', () => {
         await expect(page.getByText(/consider adding weight/i)).not.toBeVisible();
     });
 
+    test('US-GYM-22: Lowering a set weight is saved, not discarded as a non-increase', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const target = page.getByRole('spinbutton').first();
+        await expect(target).toHaveValue('60');
+        await target.fill('50');
+        await target.blur();
+
+        // Leave and resume, so the value has to come back from storage rather than local state.
+        await page.evaluate(() => window.history.back());
+        await page.getByRole('button', { name: 'Resume' }).click();
+
+        await expect(page.getByRole('spinbutton').first()).toHaveValue('50');
+    });
+
+    test('US-GYM-22: Clearing the weight field restores the previous value instead of saving zero', async ({ page }) => {
+        await page.getByRole('button', { name: 'Start' }).first().click();
+
+        const target = page.getByRole('spinbutton').first();
+        await target.fill('');
+        await target.blur();
+
+        await expect(target).toHaveValue('60');
+        await expect(page.getByRole('button', { name: /Bench Press/ })).toContainText('60kg');
+    });
+
     test('US-GYM-23: The progress chart overlays cycles, marking deload weeks and cycle boundaries', async ({ page }) => {
         await page.addInitScript(() => {
             const day = 24 * 60 * 60 * 1000;
