@@ -5,8 +5,6 @@ import { initializeApp } from "firebase-admin/app";
 
 initializeApp();
 
-export * from "./gym";
-
 // Define the secret parameter (Must set via `firebase functions:secrets:set GEMINI_API_KEY`)
 const geminiApiKey = defineSecret("GEMINI_API_KEY");
 

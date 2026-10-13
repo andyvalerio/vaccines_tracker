@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'Health Tracker',
           short_name: 'Health Tracker',
-          description: 'A personal companion for tracking health, vaccines, diet, and gym sessions.',
+          description: 'A personal companion for tracking health, vaccines, diet, and blood markers.',
           theme_color: '#ffffff',
           background_color: '#f8fafc',
           display: 'standalone',

@@ -7,9 +7,8 @@ import { Account } from './types';
 import VaccineTracker from './components/vaccines/VaccineTracker';
 import DietTracker from './components/diet/DietTracker';
 import BloodMarkersTracker from './components/markers/BloodMarkersTracker';
-import GymDashboard from './components/gym/GymDashboard';
 
-type AppTab = 'vaccines' | 'diet' | 'markers' | 'gym';
+type AppTab = 'vaccines' | 'diet' | 'markers';
 
 function App() {
   const [account, setAccount] = useState<Account | null>(null);
@@ -19,7 +18,7 @@ function App() {
   // Initialize tab from localStorage with a strict fallback
   const [activeTab, setActiveTabState] = useState<AppTab>(() => {
     const saved = localStorage.getItem('activeTab');
-    return (saved === 'diet' || saved === 'vaccines' || saved === 'markers' || saved === 'gym') ? (saved as AppTab) : 'vaccines';
+    return (saved === 'diet' || saved === 'vaccines' || saved === 'markers') ? (saved as AppTab) : 'vaccines';
   });
 
   // Explicit setter that handles persistence
@@ -114,12 +113,6 @@ function App() {
             >
               Markers
             </button>
-            <button
-              onClick={() => setActiveTab('gym')}
-              className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'gym' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Gym
-            </button>
           </nav>
 
           <div className="flex items-center gap-4">
@@ -135,10 +128,8 @@ function App() {
           <VaccineTracker account={account} />
         ) : activeTab === 'diet' ? (
           <DietTracker account={account} />
-        ) : activeTab === 'markers' ? (
-          <BloodMarkersTracker account={account} />
         ) : (
-          <GymDashboard account={account} />
+          <BloodMarkersTracker account={account} />
         )}
       </main>
     </div>
