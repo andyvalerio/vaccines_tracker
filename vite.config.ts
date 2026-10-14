@@ -16,9 +16,6 @@ export default defineConfig(({ mode }) => {
         devOptions: {
           enabled: true
         },
-        workbox: {
-          importScripts: ['/vaccines/firebase-messaging-sw.js']
-        },
         manifest: {
           name: 'Health Tracker',
           short_name: 'Health Tracker',
